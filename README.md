@@ -1,19 +1,26 @@
-# Candle Outlook — V1
+# Candle Outlook — V2
 
-A zero-backend browser prototype for uploading a candlestick chart screenshot and receiving a price-action outlook.
+Screenshot-first candlestick chart analysis that runs locally in the browser.
 
-## What V1 does
-- Upload / drag-and-drop chart screenshots
-- Runs locally in the browser
-- Detects common red/green candle pixels and groups them into visible candles
-- Estimates recent direction, candle-color balance, latest-candle impulse, and trend/range character
-- Returns Bullish / Bearish / Neutral bias, a signal-strength score, ranked scenarios, and invalidation logic
+## V2 capabilities
+- Upload or drag-and-drop a chart screenshot
+- Local browser analysis; no screenshot is uploaded to a server
+- Detect visible red/green candle groups
+- Analyze recent trend direction and market structure
+- Measure bullish/bearish candle momentum
+- Detect impulse, rejection and indecision characteristics
+- Identify whether price is near the upper/lower portion of the recent visible range
+- Mark visible support and resistance directly on the uploaded chart
+- Return Bullish / Bearish / Neutral outlook
+- Rank primary and alternative technical scenarios
+- Setup state: STRONG SETUP / DEVELOPING / WAIT / NO SETUP
+- Explicit “What would change the view?” invalidation condition
 
-## Important limitation
-The V1 score is a heuristic signal-strength score, **not** a statistically calibrated probability. Screenshot-only analysis cannot reliably know ticker metadata, exact OHLC, fundamentals, news, or future price.
+## Confidence model
+The 0–100 value is a **technical signal score**, not a guaranteed or statistically calibrated probability. V2 intentionally avoids inventing exact price levels from screenshot pixels.
 
-## Run
-Open `index.html` in a modern browser. No install or API key is required.
+## Privacy
+Screenshot processing is performed locally in the browser in this version.
 
-## Recommended V2
-Add chart-area cropping, multiple TradingView color themes, exact candle-body/wick segmentation, OCR only for metadata/price scale where necessary, annotated-image output, optional market-data verification, and backtesting/calibration of setup scores.
+## Next accuracy layer
+V3 should add robust candle body/wick segmentation, user-adjustable chart crop, more chart themes, named multi-candle patterns, swing-point clustering, annotated trigger/invalidation/target zones, optional market-data verification and outcome tracking/backtesting so confidence can eventually be calibrated against historical results.
