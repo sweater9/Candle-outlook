@@ -19,21 +19,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate required production files
+      - name: Validate screenshot analyzer production entrypoint
         run: |
           test -s index.html
-          test -s terminal.js
-          test -s terminal.css
           test -s screenshot.html
-          grep -q 'id="chart"' index.html
-          grep -q 'Scan watchlist' index.html
-          grep -q 'Screenshot analyzer' index.html
-          grep -q 'function analyze' terminal.js
-          grep -q 'async function fetchMarket' terminal.js
-          grep -q 'async function updateMTF' terminal.js
-          grep -q 'async function scanWatch' terminal.js
-      - name: JavaScript syntax check
-        run: node --check terminal.js
+          grep -q 'id="drop"' index.html
+          grep -q 'id="analyze"' index.html
+          grep -q 'function extract' index.html
+          grep -q 'function pattern' index.html
+          grep -q 'function analyze' index.html
+          grep -q 'BUY' index.html
+          grep -q 'SELL' index.html
+          grep -q 'WAIT' index.html
+          grep -q 'No demo candles' index.html
+      - name: Basic inline script syntax check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text()
+          m=re.search(r'<script>([\s\S]*?)</script>',s)
+          assert m, 'inline script not found'
+          Path('/tmp/candle-outlook.js').write_text(m.group(1))
+          PY
+          node --check /tmp/candle-outlook.js
 
   deploy:
     needs: validate
