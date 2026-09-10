@@ -1,0 +1,56 @@
+name: Deploy Candle Outlook
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required production files
+        run: |
+          test -s index.html
+          test -s terminal.js
+          test -s terminal.css
+          test -s screenshot.html
+          grep -q 'id="chart"' index.html
+          grep -q 'Scan watchlist' index.html
+          grep -q 'Screenshot analyzer' index.html
+          grep -q 'function analyze' terminal.js
+          grep -q 'async function fetchMarket' terminal.js
+          grep -q 'async function updateMTF' terminal.js
+          grep -q 'async function scanWatch' terminal.js
+      - name: JavaScript syntax check
+        run: node --check terminal.js
+
+  deploy:
+    needs: validate
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
