@@ -1,84 +1,130 @@
-# Candle Outlook — V7
+# Candle Outlook — All-in-One Market Analysis Terminal
 
-Candle Outlook is evolving from a screenshot-first candlestick reader into an interactive technical-analysis workspace.
+Candle Outlook is a TradingView-inspired technical-analysis workspace focused on one job: turn market price action into a structured, explainable chart decision and risk plan.
 
-## V7 interactive terminal
+Production entry point: `index.html`
 
-Open `terminal.html` for the new TradingView-inspired workspace.
+Legacy screenshot analyzer: `screenshot.html`
 
-Current terminal capabilities:
+## Workflow
 
-- Interactive candlestick chart rendered locally in the browser
-- Mouse-wheel zoom and drag-to-pan
-- Crosshair-style OHLC inspection
-- EMA 20 / EMA 50 / EMA 200 overlays
-- RSI 14 and ATR calculations
-- Automatic recent support and resistance levels
-- Candle-pattern detection including engulfing, doji, hammer-like, shooting-star and impulse candles
-- Combined technical evidence scoring
-- Clear **BUY / SELL / WAIT** chart decision
-- Separate overall conviction and pattern confidence
-- Entry reference, invalidation and 2R target framing when a directional setup is present
-- Evidence list explaining why the engine reached its conclusion
-- OHLC CSV import for real market data without sending the file to a backend
-- Built-in demo data for immediate testing
+`SCAN → CHART → ANALYZE → CONFIRM → RISK → PLAN`
 
-The terminal workflow is:
+## Included in the production terminal
 
-`CHART → ANALYZE → CONFIRM → RISK → PLAN`
+### Interactive chart
+- Candlestick chart rendered locally in the browser
+- Mouse-wheel zoom
+- Drag-to-pan
+- Crosshair OHLCV inspection
+- 5m / 15m / 1h / 4h / 1D / 1W timeframes
+- Automatic support and resistance overlays
+- Volume overlay
 
-## Screenshot analyzer
+### Indicators
+- EMA 20
+- EMA 50
+- EMA 200
+- RSI 14
+- MACD
+- ATR 14
+- Bollinger Bands
+- Volume vs 20-period average
 
-The original V6 screenshot analyzer remains available in `index.html` while V7 is validated.
+### Pattern and structure engine
+- Bullish / bearish engulfing
+- Doji / indecision
+- Hammer-like rejection
+- Shooting-star rejection
+- Morning-star reversal
+- Evening-star reversal
+- Marubozu / impulse candles
+- EMA structure and slope
+- Momentum alignment
+- Swing-based support / resistance context
+- High-volume directional confirmation
 
-Its workflow is:
+### Decision engine
+Every chart is framed as one of:
 
-`UPLOAD → READ CANDLES → SCORE BULL/BEAR EVIDENCE → CHART SIGNAL → CONFIRMATION → INVALIDATION`
+- **BUY** — bullish evidence has sufficient multi-factor alignment
+- **SELL** — bearish evidence has sufficient multi-factor alignment
+- **WAIT** — evidence is mixed or not strong enough
 
-Screenshot processing remains local to the browser. It deliberately avoids fabricating exact OHLC prices from pixels.
+The output separates:
 
-## Decision framework
+- Overall conviction
+- Pattern confidence
+- Bullish evidence score
+- Bearish evidence score
+- Trend
+- Momentum
+- Key support and resistance
 
-The terminal does not issue a signal from one indicator. It combines independent evidence such as:
+A directional setup also receives:
 
-1. Price relative to EMA 20
-2. EMA 20 / EMA 50 trend structure
-3. EMA slope
-4. RSI momentum context
-5. Candle-pattern context
-6. Visible support / resistance location
-7. ATR-based risk framing
+- Entry reference
+- ATR/support/resistance-based invalidation
+- Target 1 at approximately 2R
+- Target 2 at approximately 3R
+- Explicit condition that invalidates the setup
 
-Pattern confidence describes confidence in the detected candle formation. Overall conviction describes how strongly the independent factors agree. They are intentionally separate.
+## Multi-timeframe confirmation
 
-## Data architecture
+For market-loaded symbols the terminal checks:
 
-V7 currently has two safe data modes:
+- 5m
+- 15m
+- 1h
+- 4h
+- 1D
+- 1W
 
-- Local built-in demo OHLCV data
-- User-supplied OHLC CSV data
+Each timeframe receives its own BUY / SELL / WAIT read so the user can see whether the setup is aligned or fighting the higher timeframe.
 
-A licensed market-data provider will be added for live ticker lookup and intraday candles. The UI is intentionally separated from the data-provider layer so a provider can be changed later without rewriting the analyzer.
+## Watchlist and scanner
 
-Expected CSV headers:
+The default watchlist contains QQQ, SPY, SMH, GLD, BTC-USD and ETH-USD. The user can add symbols locally in the browser.
+
+`Scan watchlist` analyzes the current timeframe and ranks symbols by signal and conviction. Watchlist preferences are retained in localStorage.
+
+## Market data
+
+Candle Outlook uses a provider abstraction rather than hard-wiring the analysis logic to one vendor.
+
+Current browser-side adapters:
+
+- Binance public candles for supported crypto pairs
+- Public Yahoo chart endpoints for supported stocks / ETFs when browser access is permitted
+- OHLC CSV import as a deterministic fallback
+- Built-in deterministic demo data when a browser/provider blocks public data access
+
+No API key is embedded in the public repository.
+
+Expected CSV columns:
 
 `time,open,high,low,close,volume`
 
-At minimum the file must contain `open,high,low,close` and at least 30 valid candles.
+`date` can be used instead of `time`. At minimum, `open,high,low,close` and 30 valid candles are required.
 
-## Next V7 work
+## Screenshot mode
 
-1. Connect licensed live/delayed OHLCV market data and real ticker search.
-2. Make timeframe switching load or aggregate actual timeframe-specific candles.
-3. Add MACD, Bollinger Bands, volume analysis and volume profile.
-4. Add stronger swing-point clustering and support/resistance zones rather than single levels.
-5. Add breakout / retest / range / trend-state classification.
-6. Add multi-timeframe confirmation.
-7. Add watchlist and market scanner.
-8. Add drawing tools and annotations.
-9. Add deterministic tests for indicators, pattern formulas and decision scoring.
-10. Backtest signal outcomes before describing conviction as any empirical probability.
+The previous V6 pixel-based screenshot analyzer remains intact at `screenshot.html`. It can read conventional green/red candlestick screenshots locally in the browser and derives approximate candle geometry without fabricating exact OHLC prices from pixels.
 
-## Important interpretation note
+## Deployment and QA
 
-Candle Outlook provides chart-derived research output, not personalized investment advice. A chart signal can be invalidated by news, fundamentals, liquidity events, gaps, stale data or market structure outside the loaded candle history.
+The repository includes `.github/workflows/pages.yml`.
+
+On every push to `main` it:
+
+1. Verifies required production files exist.
+2. Checks that the chart, scanner, screenshot route and analysis functions are present.
+3. Runs `node --check terminal.js` to catch JavaScript syntax failures.
+4. Uploads the static site as a GitHub Pages artifact.
+5. Deploys the artifact to GitHub Pages.
+
+The repository also retains GitHub's existing Pages deployment path, so the production branch remains directly publishable.
+
+## Interpretation
+
+Candle Outlook provides technical chart-research output, not personalized investment advice. BUY / SELL / WAIT labels describe the current chart evidence, not guaranteed future returns or instructions to transact. News, earnings, fundamentals, liquidity events, gaps and stale or incomplete data can invalidate a technical setup.
