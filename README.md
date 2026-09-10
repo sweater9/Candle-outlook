@@ -1,84 +1,84 @@
-# Candle Outlook — V6
+# Candle Outlook — V7
 
-Screenshot-first candlestick chart analysis that runs locally in the browser.
+Candle Outlook is evolving from a screenshot-first candlestick reader into an interactive technical-analysis workspace.
 
-## What V6 does
+## V7 interactive terminal
 
-Candle Outlook turns a candlestick screenshot into a structured technical read rather than pretending to predict the future.
+Open `terminal.html` for the new TradingView-inspired workspace.
 
-Workflow:
+Current terminal capabilities:
+
+- Interactive candlestick chart rendered locally in the browser
+- Mouse-wheel zoom and drag-to-pan
+- Crosshair-style OHLC inspection
+- EMA 20 / EMA 50 / EMA 200 overlays
+- RSI 14 and ATR calculations
+- Automatic recent support and resistance levels
+- Candle-pattern detection including engulfing, doji, hammer-like, shooting-star and impulse candles
+- Combined technical evidence scoring
+- Clear **BUY / SELL / WAIT** chart decision
+- Separate overall conviction and pattern confidence
+- Entry reference, invalidation and 2R target framing when a directional setup is present
+- Evidence list explaining why the engine reached its conclusion
+- OHLC CSV import for real market data without sending the file to a backend
+- Built-in demo data for immediate testing
+
+The terminal workflow is:
+
+`CHART → ANALYZE → CONFIRM → RISK → PLAN`
+
+## Screenshot analyzer
+
+The original V6 screenshot analyzer remains available in `index.html` while V7 is validated.
+
+Its workflow is:
 
 `UPLOAD → READ CANDLES → SCORE BULL/BEAR EVIDENCE → CHART SIGNAL → CONFIRMATION → INVALIDATION`
 
-### Chart signals
+Screenshot processing remains local to the browser. It deliberately avoids fabricating exact OHLC prices from pixels.
 
-- **BUY BIAS** — strong bullish technical alignment
-- **LEAN BUY · WAIT FOR CONFIRMATION** — bullish evidence leads but confirmation is incomplete
-- **HOLD / WAIT** — mixed evidence or no clear technical edge
-- **LEAN SELL · WAIT FOR CONFIRMATION** — bearish evidence leads but confirmation is incomplete
-- **SELL BIAS** — strong bearish technical alignment
-- **NO SIGNAL** — screenshot quality is insufficient for a responsible read
+## Decision framework
 
-These labels are technical chart signals, not instructions to transact.
+The terminal does not issue a signal from one indicator. It combines independent evidence such as:
 
-## Evidence framework
+1. Price relative to EMA 20
+2. EMA 20 / EMA 50 trend structure
+3. EMA slope
+4. RSI momentum context
+5. Candle-pattern context
+6. Visible support / resistance location
+7. ATR-based risk framing
 
-V6 separately scores bullish and bearish evidence for:
+Pattern confidence describes confidence in the detected candle formation. Overall conviction describes how strongly the independent factors agree. They are intentionally separate.
 
-1. Candle pattern
-2. Market structure / trend
-3. Support / resistance location
-4. Volume confirmation — N/A until reliably detectable
-5. Momentum / indicators — only evidence the local engine can actually infer is scored
+## Data architecture
 
-Unavailable evidence is not silently treated as confirmation.
+V7 currently has two safe data modes:
 
-## Key concepts
+- Local built-in demo OHLCV data
+- User-supplied OHLC CSV data
 
-### Conviction
-How strongly the overall independent chart factors agree. High conviction requires multiple factors to align and sufficient image-read quality. It is not a probability that price will move in the predicted direction.
+A licensed market-data provider will be added for live ticker lookup and intraday candles. The UI is intentionally separated from the data-provider layer so a provider can be changed later without rewriting the analyzer.
 
-### Pattern read
-The candlestick formation the latest visible candle or sequence most closely resembles. The engine deliberately uses terms such as `hammer-like` or `engulfing-like` when exact OHLC geometry cannot be guaranteed from screenshot pixels.
+Expected CSV headers:
 
-### Pattern confidence
-Confidence in the pattern identification itself. This is separate from directional conviction. A high-confidence candle pattern can still produce low or medium overall conviction if trend, location or momentum disagrees.
+`time,open,high,low,close,volume`
 
-## V5/V6 accuracy layer
+At minimum the file must contain `open,high,low,close` and at least 30 valid candles.
 
-- Estimated candle body-to-range geometry
-- Estimated wick proportion
-- Doji-like indecision detection
-- Hammer/shooting-star-like rejection detection
-- Bullish/bearish engulfing-like detection
-- Marubozu/impulse detection
-- Image-read quality gate
-- Refuses analysis when too few reliable candles can be isolated
-- Visible support/resistance overlays
-- No fabricated exact OHLC or price levels
+## Next V7 work
 
-## Privacy
+1. Connect licensed live/delayed OHLCV market data and real ticker search.
+2. Make timeframe switching load or aggregate actual timeframe-specific candles.
+3. Add MACD, Bollinger Bands, volume analysis and volume profile.
+4. Add stronger swing-point clustering and support/resistance zones rather than single levels.
+5. Add breakout / retest / range / trend-state classification.
+6. Add multi-timeframe confirmation.
+7. Add watchlist and market scanner.
+8. Add drawing tools and annotations.
+9. Add deterministic tests for indicators, pattern formulas and decision scoring.
+10. Backtest signal outcomes before describing conviction as any empirical probability.
 
-Screenshot processing is performed locally in the browser. The current static version does not upload the screenshot to a backend.
+## Important interpretation note
 
-## Important limitations
-
-The current deterministic pixel engine works best with conventional green/red candlestick charts. Pattern geometry is estimated from screenshot pixels, not source OHLC data. Volume and indicator panels are not yet reliably interpreted. Support/resistance overlays are approximate image-space levels. A single screenshot may omit timeframe, scale, prior history, news, fundamentals and gaps outside the visible chart.
-
-## Next accuracy work
-
-Priority is validation rather than adding cosmetic features:
-
-1. Test against real TradingView and IBKR screenshots across light/dark themes.
-2. Improve candle separation and true body/wick segmentation.
-3. Cluster swing highs/lows into stronger support/resistance zones.
-4. Distinguish wick probes from confirmed closes beyond a level.
-5. Detect volume panels and common indicators only when reliable.
-6. Add deterministic synthetic tests for pattern formulas and scoring.
-7. Add screenshot paste and preserve/redraw annotations on resize.
-8. Later, optionally verify screenshot observations against licensed OHLCV data when ticker/timeframe are known.
-9. Backtest signal outcomes before ever describing confidence as an empirical probability.
-
-## Safety of interpretation
-
-Candle Outlook is chart-pattern analysis, not a prediction. News, fundamentals, liquidity events and price action outside the screenshot can materially change the outcome.
+Candle Outlook provides chart-derived research output, not personalized investment advice. A chart signal can be invalidated by news, fundamentals, liquidity events, gaps, stale data or market structure outside the loaded candle history.
