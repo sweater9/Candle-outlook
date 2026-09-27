@@ -1,130 +1,86 @@
-# Candle Outlook — All-in-One Market Analysis Terminal
+# Candle Outlook — Chart Analysis & Trade-Plan Terminal (v3)
 
-Candle Outlook is a TradingView-inspired technical-analysis workspace focused on one job: turn market price action into a structured, explainable chart decision and risk plan.
+Candle Outlook turns a candlestick chart screenshot into a structured, explainable technical read: market structure, a deterministic setup-quality scorecard, a scenario-based decision, and an explicit trade plan — never a single opaque "AI confidence" number.
 
 Production entry point: `index.html`
 
-Legacy screenshot analyzer: `screenshot.html`
+Live market-data terminal (separate product, unchanged): `terminal.html`
+
+Legacy V6 screenshot analyzer (kept for reference): `screenshot.html`
 
 ## Workflow
 
-`SCAN → CHART → ANALYZE → CONFIRM → RISK → PLAN`
+`CHART → MARKET STRUCTURE → SETUP → SCENARIO → RISK → PLAN`
 
-## Included in the production terminal
+## What's new in v3
 
-### Interactive chart
-- Candlestick chart rendered locally in the browser
-- Mouse-wheel zoom
-- Drag-to-pan
-- Crosshair OHLCV inspection
-- 5m / 15m / 1h / 4h / 1D / 1W timeframes
-- Automatic support and resistance overlays
-- Volume overlay
+### Market structure engine
+Swing-point detection classifies HH / HL / LH / LL sequences, trend breaks, consolidation, breakout-and-retest, liquidity sweeps and failed breakouts — structure carries more weight in the decision than any single candle.
 
-### Indicators
-- EMA 20
-- EMA 50
-- EMA 200
-- RSI 14
-- MACD
-- ATR 14
-- Bollinger Bands
-- Volume vs 20-period average
+### Deterministic setup-quality scorecard
+Instead of one opaque confidence number, every setup is scored 0–10 on eight independent, inspectable factors — Structure, Support/Resistance, Candle, Volume, Momentum, R:R, Context and Timeframe alignment — combined with fixed weights into a 0–100 conviction score. **Pattern-ID confidence and trade conviction are reported separately**: a hammer can be identified with 90%+ confidence while still being a poor trade in a bad location.
 
-### Pattern and structure engine
-- Bullish / bearish engulfing
-- Doji / indecision
-- Hammer-like rejection
-- Shooting-star rejection
-- Morning-star reversal
-- Evening-star reversal
-- Marubozu / impulse candles
-- EMA structure and slope
-- Momentum alignment
-- Swing-based support / resistance context
-- High-volume directional confirmation
+### Scenario-based output
+Results are framed as a primary scenario (bias, confirmation trigger, invalidation) and an explicit alternative scenario for when the setup fails — never a single guaranteed outcome.
 
-### Decision engine
-Every chart is framed as one of:
+### Multi-timeframe confirmation
+Upload 5m / 15m / 1h / 4h screenshots of the same chart and pick a focus timeframe. Other timeframes are folded into the scorecard and no-trade check, weighted by rank — a bullish 5-minute candle against a strong 4-hour downtrend scores materially lower conviction.
 
-- **BUY** — bullish evidence has sufficient multi-factor alignment
-- **SELL** — bearish evidence has sufficient multi-factor alignment
-- **WAIT** — evidence is mixed or not strong enough
+### No-trade detection
+The engine explicitly flags poor R:R, unclear/range-bound structure, price trapped mid-range, and conflicting higher timeframes, forcing a WAIT even when a single candle looks attractive. Sometimes WAIT is the most informative output.
 
-The output separates:
+### Event risk
+An optional "elevated event risk" flag and free-text note (earnings, FOMC, CPI, etc.) is folded into the Context score and shown as a standalone warning — nothing is invented; this is user-supplied.
 
-- Overall conviction
-- Pattern confidence
-- Bullish evidence score
-- Bearish evidence score
-- Trend
-- Momentum
-- Key support and resistance
+### Trade plan + position sizing
+Every directional read gets an explicit Bias / Confirmation / Invalidation / Stop / Target 1 / Target 2 / R:R panel. Supplying the highest and lowest visible price on the chart's own y-axis calibrates every level to real $ values (linear interpolation — never fabricated). Adding account size and max-risk% then computes a position size.
 
-A directional setup also receives:
+### Journal, comparison & post-trade analysis
+Save any analysis as a journal snapshot, record what actually happened (target hit / invalidated / sideways / false breakout), and Candle Outlook computes historical follow-through rates grouped by pattern + decision + volume context — strictly from your own recorded samples, never fabricated. Select saved setups for a side-by-side comparison table. Upload a later screenshot of a saved setup and the engine checks the new price against the original target/invalidation levels (when both charts are calibrated) and reports what changed.
 
-- Entry reference
-- ATR/support/resistance-based invalidation
-- Target 1 at approximately 2R
-- Target 2 at approximately 3R
-- Explicit condition that invalidates the setup
+## Multi-timeframe & candlestick pattern engine
 
-## Multi-timeframe confirmation
+- Bullish / bearish engulfing, doji / indecision, hammer / shooting-star rejection, morning-star / evening-star reversal, marubozu / impulse candles
+- HH/HL/LH/LL swing structure, trend breaks, consolidation, breakout-retest, liquidity sweeps, failed breakouts
+- Volume context (manual: expanding / average / contracting — never assumed), momentum acceleration/exhaustion via candle-range expansion/contraction
+- Support/resistance from the most recent confirmed swing points
 
-For market-loaded symbols the terminal checks:
+## Decision engine
 
-- 5m
-- 15m
-- 1h
-- 4h
-- 1D
-- 1W
+Every focus-timeframe read resolves to one of:
 
-Each timeframe receives its own BUY / SELL / WAIT read so the user can see whether the setup is aligned or fighting the higher timeframe.
+- **BUY** — bullish evidence clears the conviction threshold and no no-trade condition is flagged
+- **SELL** — bearish evidence clears the conviction threshold and no no-trade condition is flagged
+- **WAIT** — evidence is mixed, a no-trade condition is flagged, or R:R is too weak to favor a trade
 
-## Watchlist and scanner
+## Architecture
 
-The default watchlist contains QQQ, SPY, SMH, GLD, BTC-USD and ETH-USD. The user can add symbols locally in the browser.
+Pure client-side, no build step, no backend, no API keys:
 
-`Scan watchlist` analyzes the current timeframe and ranks symbols by signal and conviction. Watchlist preferences are retained in localStorage.
+```
+index.html            production UI
+css/app.css            styling
+js/app.js               DOM wiring / rendering
+js/journal.js           localStorage journal, stats, comparison, post-trade analysis
+js/engine/geometry.js   pixel-space candle extraction from the uploaded screenshot
+js/engine/structure.js  market-structure engine (swings, HH/HL/LH/LL, events)
+js/engine/patterns.js   candlestick pattern identification
+js/engine/scoring.js    deterministic weighted scoring engine
+js/engine/scenario.js   levels, trade plan, price calibration, no-trade detection, scenario text
+js/engine/mtf.js        multi-timeframe alignment
+js/engine/analyze.js    composes the modules above into one full chart read
+```
 
-## Market data
-
-Candle Outlook uses a provider abstraction rather than hard-wiring the analysis logic to one vendor.
-
-Current browser-side adapters:
-
-- Binance public candles for supported crypto pairs
-- Public Yahoo chart endpoints for supported stocks / ETFs when browser access is permitted
-- OHLC CSV import as a deterministic fallback
-- Built-in deterministic demo data when a browser/provider blocks public data access
-
-No API key is embedded in the public repository.
-
-Expected CSV columns:
-
-`time,open,high,low,close,volume`
-
-`date` can be used instead of `time`. At minimum, `open,high,low,close` and 30 valid candles are required.
-
-## Screenshot mode
-
-The previous V6 pixel-based screenshot analyzer remains intact at `screenshot.html`. It can read conventional green/red candlestick screenshots locally in the browser and derives approximate candle geometry without fabricating exact OHLC prices from pixels.
+Nothing is uploaded anywhere — every screenshot is read locally in the browser via `<canvas>` pixel scanning. No OHLC prices are fabricated: dollar levels only appear once you supply the visible chart high/low.
 
 ## Deployment and QA
 
-The repository includes `.github/workflows/pages.yml`.
+`.github/workflows/pages.yml` runs on every push to `main`:
 
-On every push to `main` it:
-
-1. Verifies required production files exist.
-2. Checks that the chart, scanner, screenshot route and analysis functions are present.
-3. Runs `node --check terminal.js` to catch JavaScript syntax failures.
-4. Uploads the static site as a GitHub Pages artifact.
-5. Deploys the artifact to GitHub Pages.
-
-The repository also retains GitHub's existing Pages deployment path, so the production branch remains directly publishable.
+1. Verifies the production file layout is present.
+2. Syntax-checks every JS module with `node --check`.
+3. Uploads and deploys the static site to GitHub Pages.
 
 ## Interpretation
 
-Candle Outlook provides technical chart-research output, not personalized investment advice. BUY / SELL / WAIT labels describe the current chart evidence, not guaranteed future returns or instructions to transact. News, earnings, fundamentals, liquidity events, gaps and stale or incomplete data can invalidate a technical setup.
+Candle Outlook provides technical chart-research output, not personalized investment advice. BUY / SELL / WAIT labels describe the current chart evidence, not guaranteed future returns or instructions to transact. News, earnings, fundamentals, liquidity events, gaps and information outside the uploaded screenshot(s) can invalidate a technical setup.
