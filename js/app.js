@@ -232,6 +232,17 @@ function renderResult(focus, meta) {
   const levels = focus.levels;
   const rrText = plan.rr != null ? `1:${plan.rr.toFixed(1)}` : 'n/a';
 
+  const ind = focus.indicators;
+  const indText = {
+    rsi: ind && ind.rsi != null ? ind.rsi.toFixed(0) : 'n/a (needs more candles)',
+    ema: ind && ind.emaFast != null && ind.emaSlow != null
+      ? (ind.emaFast < ind.emaSlow ? 'EMA9 above EMA21 (short-term bullish stack)' : 'EMA9 below EMA21 (short-term bearish stack)')
+      : 'EMA9/21 n/a (needs more candles)',
+    divergenceHtml: ind && ind.divergences && ind.divergences.length
+      ? ind.divergences.map((d) => `<div class="evItem"><span class="dotGood"></span>${esc(d.label)}.</div>`).join('')
+      : '',
+  };
+
   const planRows = [
     ['Bias', focus.bias === 'bullish' ? 'Bullish' : 'Bearish'],
     ['Confirmation', priceOrPixel(levels, plan.confirmationY, focus.sign > 0 ? 'Close above resistance' : 'Close below support')],
@@ -275,6 +286,12 @@ function renderResult(focus, meta) {
       <h3>Market structure</h3>
       <p>${esc(focus.structure.label)}${focus.structure.trendBreak.broke ? ` — ${esc(focus.structure.trendBreak.label)}.` : ''}</p>
       ${focus.structure.events.length ? `<div style="margin-top:8px">${focus.structure.events.map((e) => `<div class="evItem"><span class="dotGood"></span>${esc(e.label)}</div>`).join('')}</div>` : ''}
+    </div>
+
+    <div class="section">
+      <h3>Momentum &amp; indicators</h3>
+      <p>RSI(14): <b>${indText.rsi}</b> · ${esc(indText.ema)}</p>
+      ${indText.divergenceHtml}
     </div>
 
     <div class="section">
@@ -465,6 +482,34 @@ function init() {
   $('resetBtn').onclick = () => location.reload();
   $('clearJournalBtn').onclick = () => {
     if (window.confirm('Clear the entire journal? This cannot be undone.')) { journal.clearJournal(); renderJournal(); }
+  };
+  $('exportJournalBtn').onclick = () => {
+    const json = journal.exportJournal();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `candle-outlook-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+  $('importJournalBtn').onclick = () => $('importJournalFile').click();
+  $('importJournalFile').onchange = () => {
+    const file = $('importJournalFile').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = journal.importJournal(String(reader.result), 'merge');
+      const status = $('importStatus');
+      status.textContent = result.ok
+        ? `Imported ${result.added} new setup(s), skipped ${result.skipped} already in your journal.`
+        : `Import failed: ${result.error}`;
+      if (result.ok) renderJournal();
+    };
+    reader.readAsText(file);
+    $('importJournalFile').value = '';
   };
   $('compareSelectedBtn').onclick = () => {
     const ids = Array.from(document.querySelectorAll('.compareCheck:checked')).map((el) => el.value);

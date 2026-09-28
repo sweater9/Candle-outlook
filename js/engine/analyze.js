@@ -7,6 +7,7 @@ import { analyzeStructure } from './structure.js';
 import { identifyPattern } from './patterns.js';
 import { determineBias, scoreSetup } from './scoring.js';
 import { buildLevels, buildTradePlan, evaluateNoTrade, buildScenario, positionSize } from './scenario.js';
+import { computeMomentumIndicators } from './indicators.js';
 
 export function runAnalysis({ candles, quality, ticker, timeframeLabel, calibration, volumeContext, eventRisk, mtfEntries, account }) {
   if (quality < 48 || candles.length < 7) {
@@ -22,6 +23,7 @@ export function runAnalysis({ candles, quality, ticker, timeframeLabel, calibrat
   const structure = analyzeStructure(working);
   const pattern = identifyPattern(working);
   const bias = determineBias(pattern, structure, working);
+  const indicators = computeMomentumIndicators(working, structure);
 
   if (bias === 'mixed') {
     return {
@@ -33,6 +35,7 @@ export function runAnalysis({ candles, quality, ticker, timeframeLabel, calibrat
       candles: working,
       structure,
       pattern,
+      indicators,
       levels: null,
       plan: null,
       scenario: null,
@@ -48,7 +51,7 @@ export function runAnalysis({ candles, quality, ticker, timeframeLabel, calibrat
   const sign = bias === 'bullish' ? 1 : -1;
   const levels = buildLevels(working, structure, calibration);
   const plan = buildTradePlan(working, levels, sign);
-  const scorecard = scoreSetup({ candles: working, structure, pattern, levels, sign, rr: plan.rr, volumeContext, mtfEntries, eventRisk });
+  const scorecard = scoreSetup({ candles: working, structure, pattern, levels, sign, rr: plan.rr, volumeContext, mtfEntries, eventRisk, indicators });
   const noTrade = evaluateNoTrade({ quality, candleCount: working.length, rr: plan.rr, structure, levels, lastCandle: working.at(-1), mtfEntries, sign });
   const scenario = buildScenario({ sign, levels, plan, ticker });
   const sizing = account ? positionSize({ accountSize: account.size, riskPct: account.riskPct, levels, plan }) : null;
@@ -62,6 +65,7 @@ export function runAnalysis({ candles, quality, ticker, timeframeLabel, calibrat
     candles: working,
     structure,
     pattern,
+    indicators,
     bias,
     sign,
     levels,

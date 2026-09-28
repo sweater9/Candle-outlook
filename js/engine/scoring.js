@@ -111,7 +111,7 @@ function srScore(levels, lastCandle, sign) {
   return { score: Math.round(clamp(score, 0, 10)), notes, pos };
 }
 
-function momentumScore(candles, sign) {
+function momentumScore(candles, sign, indicators) {
   const recent = candles.slice(-8);
   const bullShare = recent.filter((c) => c.dir > 0).length / recent.length;
   const momentumVal = (bullShare - 0.5) * 2; // -1..1
@@ -136,6 +136,42 @@ function momentumScore(candles, sign) {
   }
   const share = sign > 0 ? bullShare : 1 - bullShare;
   notes.push(`${Math.round(share * 100)}% of the last ${recent.length} candles are ${sign > 0 ? 'bullish' : 'bearish'}-colored.`);
+
+  if (indicators) {
+    const { rsi, emaFast, emaSlow, divergences } = indicators;
+    if (rsi != null) {
+      const rsiSupports = sign > 0 ? rsi > 52 : rsi < 48;
+      if (rsiSupports) {
+        score = clamp(score + 1, 0, 10);
+        notes.push(`RSI(14) is ${rsi.toFixed(0)}, on this thesis' side of the midline.`);
+      } else {
+        score = clamp(score - 1, 0, 10);
+        notes.push(`RSI(14) is ${rsi.toFixed(0)}, not confirming this thesis.`);
+      }
+      if (sign > 0 && rsi > 75) notes.push('RSI is in overbought territory, raising exhaustion risk.');
+      if (sign < 0 && rsi < 25) notes.push('RSI is in oversold territory, raising bounce risk.');
+    }
+    if (emaFast != null && emaSlow != null) {
+      const fastAbovePrice = emaFast < emaSlow; // smaller y = higher price
+      if ((sign > 0 && fastAbovePrice) || (sign < 0 && !fastAbovePrice)) {
+        score = clamp(score + 1, 0, 10);
+        notes.push('EMA9 vs EMA21 positioning supports this thesis.');
+      } else {
+        notes.push('EMA9 vs EMA21 positioning does not confirm this thesis.');
+      }
+    }
+    for (const d of divergences || []) {
+      const evSign = d.type === 'bullish-rsi-divergence' ? 1 : -1;
+      if (evSign === sign) {
+        score = clamp(score + 1, 0, 10);
+        notes.push(`${d.label}.`);
+      } else {
+        score = clamp(score - 2, 0, 10);
+        notes.push(`${d.label}, which works against this thesis.`);
+      }
+    }
+  }
+
   return { score: Math.round(score), notes, bullShare };
 }
 
@@ -231,14 +267,14 @@ function mtfScore(mtfEntries, sign) {
 
 // Main entry point. `levels` and `rr` are produced by scenario.js so the
 // R:R the scorer sees is the same R:R shown in the trade plan.
-export function scoreSetup({ candles, structure, pattern, levels, sign, rr, volumeContext, mtfEntries, eventRisk }) {
+export function scoreSetup({ candles, structure, pattern, levels, sign, rr, volumeContext, mtfEntries, eventRisk, indicators }) {
   const last = candles.at(-1);
   const factors = {
     structure: structureScore(structure, sign),
     sr: srScore(levels, last, sign),
     candle: candleScore(pattern, last, sign),
     volume: volumeScore(volumeContext, structure, sign),
-    momentum: momentumScore(candles, sign),
+    momentum: momentumScore(candles, sign, indicators),
     rr: rrScore(rr),
     context: contextScore(candles, eventRisk, sign),
   };
