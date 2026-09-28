@@ -116,6 +116,46 @@ export function clearJournal() {
   saveJournal([]);
 }
 
+// The journal is localStorage-only, so a browser data clear or switching
+// devices wipes it silently. Export/import gives it a portable backup.
+export function exportJournal() {
+  return JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), entries: loadJournal() }, null, 2);
+}
+
+// Accepts either the {version, entries} envelope from exportJournal() or a
+// bare array (in case someone hand-edits/concatenates files). Existing
+// entries are matched by id; 'merge' keeps the existing copy on a
+// collision (so a re-import never clobbers newer local edits), 'replace'
+// discards the current journal entirely and adopts the imported one.
+export function importJournal(jsonText, mode = 'merge') {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return { ok: false, error: 'That file is not valid JSON.' };
+  }
+  const incoming = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.entries) ? parsed.entries : null;
+  if (!incoming) return { ok: false, error: 'That file does not look like a Candle Outlook journal export.' };
+
+  if (mode === 'replace') {
+    saveJournal(incoming);
+    return { ok: true, added: incoming.length, skipped: 0, total: incoming.length };
+  }
+
+  const existing = loadJournal();
+  const existingIds = new Set(existing.map((e) => e.id));
+  let added = 0, skipped = 0;
+  for (const entry of incoming) {
+    if (!entry || !entry.id || existingIds.has(entry.id)) { skipped++; continue; }
+    existing.push(entry);
+    existingIds.add(entry.id);
+    added++;
+  }
+  existing.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+  saveJournal(existing);
+  return { ok: true, added, skipped, total: existing.length };
+}
+
 // Groups closed (non-"still-open") entries by pattern + decision + volume
 // context and reports the observed follow-through rate. This is strictly
 // derived from the user's own recorded outcomes — never fabricated, and

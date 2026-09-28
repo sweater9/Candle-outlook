@@ -86,8 +86,12 @@
       <div class="sectionLabel">SAVED SETUPS</div>
       <div class="rowBar">
         <button class="btn secondary small" id="compareSelectedBtn">Compare selected →</button>
+        <button class="btn secondary small" id="exportJournalBtn">Export journal</button>
+        <button class="btn secondary small" id="importJournalBtn">Import journal</button>
+        <input type="file" accept="application/json" id="importJournalFile" class="hidden">
         <button class="btn secondary small" id="clearJournalBtn">Clear journal</button>
       </div>
+      <p class="microNote" id="importStatus"></p>
       <div id="journalList" class="journalList"></div>
     </section>
   </main>

@@ -36,13 +36,16 @@ An optional "elevated event risk" flag and free-text note (earnings, FOMC, CPI, 
 Every directional read gets an explicit Bias / Confirmation / Invalidation / Stop / Target 1 / Target 2 / R:R panel. Supplying the highest and lowest visible price on the chart's own y-axis calibrates every level to real $ values (linear interpolation — never fabricated). Adding account size and max-risk% then computes a position size.
 
 ### Journal, comparison & post-trade analysis
-Save any analysis as a journal snapshot, record what actually happened (target hit / invalidated / sideways / false breakout), and Candle Outlook computes historical follow-through rates grouped by pattern + decision + volume context — strictly from your own recorded samples, never fabricated. Select saved setups for a side-by-side comparison table. Upload a later screenshot of a saved setup and the engine checks the new price against the original target/invalidation levels (when both charts are calibrated) and reports what changed.
+Save any analysis as a journal snapshot, record what actually happened (target hit / invalidated / sideways / false breakout), and Candle Outlook computes historical follow-through rates grouped by pattern + decision + volume context — strictly from your own recorded samples, never fabricated. Select saved setups for a side-by-side comparison table. Upload a later screenshot of a saved setup and the engine checks the new price against the original target/invalidation levels (when both charts are calibrated) and reports what changed. The journal is localStorage-only, so export/import buttons on the Journal tab give it a portable JSON backup — import merges by entry id, so re-importing never clobbers newer local edits.
+
+### Real momentum indicators
+RSI(14) and EMA(9)/EMA(21) are computed from each candle's estimated close (not just a colored-candle-share proxy), and the engine checks for RSI divergence against the last two confirmed swing highs/lows — price making a higher high while RSI makes a lower high (or the mirror at lows) is flagged as momentum divergence and folded into the Momentum score.
 
 ## Multi-timeframe & candlestick pattern engine
 
-- Bullish / bearish engulfing, doji / indecision, hammer / shooting-star rejection, morning-star / evening-star reversal, marubozu / impulse candles
+- Bullish / bearish engulfing, doji / indecision, hammer / shooting-star rejection, morning-star / evening-star reversal, marubozu / impulse candles, three white soldiers / three black crows, piercing line / dark cloud cover, tweezer top / tweezer bottom, inside bar
 - HH/HL/LH/LL swing structure, trend breaks, consolidation, breakout-retest, liquidity sweeps, failed breakouts
-- Volume context (manual: expanding / average / contracting — never assumed), momentum acceleration/exhaustion via candle-range expansion/contraction
+- Volume context (manual: expanding / average / contracting — never assumed), momentum acceleration/exhaustion via candle-range expansion/contraction, RSI(14)/EMA(9,21)/divergence
 - Support/resistance from the most recent confirmed swing points
 
 ## Decision engine
@@ -65,6 +68,7 @@ js/journal.js           localStorage journal, stats, comparison, post-trade anal
 js/engine/geometry.js   pixel-space candle extraction from the uploaded screenshot
 js/engine/structure.js  market-structure engine (swings, HH/HL/LH/LL, events)
 js/engine/patterns.js   candlestick pattern identification
+js/engine/indicators.js RSI(14), EMA(9/21) and price/RSI divergence from candles' estimated closes
 js/engine/scoring.js    deterministic weighted scoring engine
 js/engine/scenario.js   levels, trade plan, price calibration, no-trade detection, scenario text
 js/engine/mtf.js        multi-timeframe alignment
