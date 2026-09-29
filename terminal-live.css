@@ -4,6 +4,7 @@
 .providerChip.alpaca{color:#6fe4bf;border-color:#1e725d;background:#0d221c}
 .providerChip.twelvedata{color:#8bb6ff;border-color:#2a4570;background:#122038}
 .providerChip.binance{color:#f1ce78;border-color:#6e5d2c;background:#1a170e}
+.providerChip.yfinance{color:#9fd4a8;border-color:#2d5a3a;background:#0f1c14}
 .providerChip.yahoo{color:#c8d2db;border-color:#314152;background:#121a22}
 .providerChip.csv,.providerChip.demo{color:var(--muted)}
 .apiBox{display:grid;gap:4px}
