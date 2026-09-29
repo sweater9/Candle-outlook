@@ -342,6 +342,64 @@ def fetch_yfinance(symbol: str, interval_key: str, limit: int) -> dict:
     return {"provider": "yfinance", "symbol": symbol, "interval": interval_key, "candles": candles}
 
 
+@app.get("/")
+def index():
+    """Tiny landing so the service URL is useful in a browser."""
+    wants_json = "application/json" in (request.headers.get("Accept") or "")
+    body = {
+        "service": "candle-outlook-proxy",
+        "ok": True,
+        "endpoints": {
+            "health": "/api/health",
+            "candles": "/api/candles?symbol=AAPL&interval=1D&provider=auto&limit=100",
+        },
+        "providers": ["auto", "twelvedata", "alpaca", "yfinance"],
+        "intervals": sorted({k for k in INTERVAL_MAP if len(k) <= 3 or k in {"1min", "5min", "15min", "1day", "1week"}}),
+        "note": "Point the terminal at this origin with ?api=<this-host> (no path).",
+    }
+    if wants_json:
+        return jsonify(body)
+    html = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Candle Outlook proxy</title>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;font:14px/1.45 system-ui,sans-serif;background:#0b0f14;color:#d7dee7}
+  main{max-width:640px;margin:48px auto;padding:0 20px}
+  h1{font-size:20px;font-weight:650;margin:0 0 8px}
+  p{color:#8b98a8;margin:0 0 18px}
+  code,a{color:#9ec1ff}
+  a{text-decoration:none}
+  a:hover{text-decoration:underline}
+  ul{padding-left:18px;margin:0 0 18px}
+  li{margin:8px 0}
+  .chip{display:inline-block;padding:2px 8px;border:1px solid #2a3644;border-radius:999px;color:#a9b6c4;font-size:12px;margin-right:6px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Candle Outlook proxy</h1>
+  <p>Market-data API for the terminal. Keys stay server-side.</p>
+  <ul>
+    <li><a href="/api/health"><code>/api/health</code></a> — providers + status</li>
+    <li><a href="/api/candles?symbol=AAPL&amp;interval=1D&amp;provider=auto&amp;limit=100"><code>/api/candles?symbol=AAPL&amp;interval=1D&amp;provider=auto&amp;limit=100</code></a></li>
+  </ul>
+  <p>
+    <span class="chip">auto</span>
+    <span class="chip">twelvedata</span>
+    <span class="chip">alpaca</span>
+    <span class="chip">yfinance</span>
+  </p>
+  <p>Terminal tip: open with <code>?api=https://candle-outlook-proxy.onrender.com</code> (origin only, no path).</p>
+</main>
+</body>
+</html>"""
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 @app.get("/api/health")
 def health():
     return jsonify(
