@@ -6,7 +6,7 @@ import { bootLiveHandoff } from './live-handoff.js';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '"', "'": '&#39;' }[c]));
 
 const slots = {};
 let focusTf = '1h';
@@ -290,7 +290,7 @@ function renderResult(focus, meta) {
     </div>
 
     <div class="section">
-      <h3>Momentum & indicators</h3>
+      <h3>Momentum &amp; indicators</h3>
       <p>RSI(14): <b>${indText.rsi}</b> · ${esc(indText.ema)}</p>
       ${indText.divergenceHtml}
     </div>
