@@ -6,7 +6,7 @@ import { bootLiveHandoff } from './live-handoff.js';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[\u0026<>"']/g, (c) => ({ '\u0026': '\u0026amp;', '<': '\u0026lt;', '>': '\u0026gt;', '"': '\u0026quot;', "'": '\u0026#39;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
 
 const slots = {};
 let focusTf = '1h';
@@ -35,11 +35,11 @@ function buildTiles() {
     const overlay = node.querySelector('.overlay');
 
     pickBtn.onclick = (e) => { e.stopPropagation(); fileInput.click(); };
-    drop.onclick = (e) => { if (!img.src \u0026\u0026 e.target !== pickBtn) fileInput.click(); };
+    drop.onclick = (e) => { if (!img.src && e.target !== pickBtn) fileInput.click(); };
     ['dragenter', 'dragover'].forEach((k) => drop.addEventListener(k, (e) => { e.preventDefault(); drop.classList.add('drag'); }));
     ['dragleave', 'drop'].forEach((k) => drop.addEventListener(k, () => drop.classList.remove('drag')));
     drop.addEventListener('drop', (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) loadFile(tf, e.dataTransfer.files[0]); });
-    fileInput.onchange = () => fileInput.files[0] \u0026\u0026 loadFile(tf, fileInput.files[0]);
+    fileInput.onchange = () => fileInput.files[0] && loadFile(tf, fileInput.files[0]);
 
     slots[tf] = { img, fileInput, drop, status, emptyDiv, overlay };
     grid.appendChild(node);
@@ -110,10 +110,10 @@ async function runFullAnalysis() {
   const eventRisk = { flagged: $('eventRiskFlag').checked, text: $('eventRiskText').value.trim() };
   const chartHigh = parseFloat($('chartHigh').value);
   const chartLow = parseFloat($('chartLow').value);
-  const calibration = (isFinite(chartHigh) \u0026\u0026 isFinite(chartLow) \u0026\u0026 chartHigh > chartLow) ? { highPrice: chartHigh, lowPrice: chartLow } : null;
+  const calibration = (isFinite(chartHigh) && isFinite(chartLow) && chartHigh > chartLow) ? { highPrice: chartHigh, lowPrice: chartLow } : null;
   const accountSize = parseFloat($('accountSize').value);
   const riskPct = parseFloat($('riskPct').value);
-  const account = (isFinite(accountSize) \u0026\u0026 isFinite(riskPct) \u0026\u0026 accountSize > 0 \u0026\u0026 riskPct > 0) ? { size: accountSize, riskPct } : null;
+  const account = (isFinite(accountSize) && isFinite(riskPct) && accountSize > 0 && riskPct > 0) ? { size: accountSize, riskPct } : null;
 
   const cv = $('cv');
   const geo = {};
@@ -127,7 +127,7 @@ async function runFullAnalysis() {
   const mtfEntries = others
     .map((tf) => {
       const r = otherResults[tf];
-      return r \u0026\u0026 !r.error \u0026\u0026 r.bias !== 'mixed' ? { timeframe: tf, bias: r.bias, conviction: r.conviction } : null;
+      return r && !r.error && r.bias !== 'mixed' ? { timeframe: tf, bias: r.bias, conviction: r.conviction } : null;
     })
     .filter(Boolean);
 
@@ -137,7 +137,7 @@ async function runFullAnalysis() {
     calibration, volumeContext, eventRisk, mtfEntries, account,
   });
 
-  const alignment = (!focus.error \u0026\u0026 focus.sign) ? summarizeAlignment(mtfEntries, focus.sign, effectiveFocus) : null;
+  const alignment = (!focus.error && focus.sign) ? summarizeAlignment(mtfEntries, focus.sign, effectiveFocus) : null;
 
   renderResult(focus, {
     mtfEntries, alignment, focusTf: effectiveFocus, otherResults, ticker, volumeContext, eventRisk,
@@ -215,15 +215,15 @@ function renderResult(focus, meta) {
     ? focus.scorecard.weaknesses.map((s) => `<div class="evItem"><span class="dotBad"></span>${esc(s)}</div>`).join('')
     : '<div class="evItem muted">No major weaknesses identified.</div>';
 
-  const noTradeHtml = focus.noTrade \u0026\u0026 focus.noTrade.flagged
+  const noTradeHtml = focus.noTrade && focus.noTrade.flagged
     ? `<div class="noTradeBanner"><b>No-trade conditions flagged</b>${focus.noTrade.reasons.map((r) => `• ${esc(r)}`).join('<br>')}</div>`
     : '';
-  const eventHtml = meta.eventRisk \u0026\u0026 meta.eventRisk.flagged
+  const eventHtml = meta.eventRisk && meta.eventRisk.flagged
     ? `<div class="eventBanner"><b>Event risk:</b> ${esc(meta.eventRisk.text || 'A known catalyst is nearby.')} This can override an otherwise clean technical setup.</div>`
     : '';
 
   const mtfChips = (meta.mtfEntries || []).map((e) => {
-    const agree = (e.bias === 'bullish' \u0026\u0026 focus.sign > 0) || (e.bias === 'bearish' \u0026\u0026 focus.sign < 0);
+    const agree = (e.bias === 'bullish' && focus.sign > 0) || (e.bias === 'bearish' && focus.sign < 0);
     return `<span class="mtfChip ${agree ? 'agree' : 'conflict'}">${esc(e.timeframe)} · ${esc(e.bias)}</span>`;
   }).join('');
   const focusChip = `<span class="mtfChip agree">${esc(meta.focusTf)} · focus</span>`;
@@ -235,11 +235,11 @@ function renderResult(focus, meta) {
 
   const ind = focus.indicators;
   const indText = {
-    rsi: ind \u0026\u0026 ind.rsi != null ? ind.rsi.toFixed(0) : 'n/a (needs more candles)',
-    ema: ind \u0026\u0026 ind.emaFast != null \u0026\u0026 ind.emaSlow != null
+    rsi: ind && ind.rsi != null ? ind.rsi.toFixed(0) : 'n/a (needs more candles)',
+    ema: ind && ind.emaFast != null && ind.emaSlow != null
       ? (ind.emaFast < ind.emaSlow ? 'EMA9 above EMA21 (short-term bullish stack)' : 'EMA9 below EMA21 (short-term bearish stack)')
       : 'EMA9/21 n/a (needs more candles)',
-    divergenceHtml: ind \u0026\u0026 ind.divergences \u0026\u0026 ind.divergences.length
+    divergenceHtml: ind && ind.divergences && ind.divergences.length
       ? ind.divergences.map((d) => `<div class="evItem"><span class="dotGood"></span>${esc(d.label)}.</div>`).join('')
       : '',
   };
@@ -290,7 +290,7 @@ function renderResult(focus, meta) {
     </div>
 
     <div class="section">
-      <h3>Momentum \u0026amp; indicators</h3>
+      <h3>Momentum & indicators</h3>
       <p>RSI(14): <b>${indText.rsi}</b> · ${esc(indText.ema)}</p>
       ${indText.divergenceHtml}
     </div>
@@ -429,10 +429,10 @@ function handleFollowUpUpload(input) {
 
       let calibration = null;
       const highStr = window.prompt('Highest visible price on this follow-up chart (Cancel to skip $ calibration):', '');
-      if (highStr !== null \u0026\u0026 highStr.trim() !== '') {
+      if (highStr !== null && highStr.trim() !== '') {
         const lowStr = window.prompt('Lowest visible price on this follow-up chart:', '');
         const hi = parseFloat(highStr), lo = parseFloat(lowStr);
-        if (isFinite(hi) \u0026\u0026 isFinite(lo) \u0026\u0026 hi > lo) calibration = { highPrice: hi, lowPrice: lo };
+        if (isFinite(hi) && isFinite(lo) && hi > lo) calibration = { highPrice: hi, lowPrice: lo };
       }
 
       const followResult = runAnalysis({
@@ -459,7 +459,7 @@ function renderCompare(entries) {
     <td><span class="badge ${r.decision.toLowerCase()}">${r.decision}</span></td>
     <td>${r.conviction}/100</td><td>${esc(r.structureLabel || '—')}</td><td>${esc(r.patternName || '—')}</td>
     <td>${r.rr != null ? `1:${r.rr}` : 'n/a'}</td><td>${r.eventRiskFlagged ? '⚠ flagged' : '—'}</td>
-    <td>${esc((r.weaknesses \u0026\u0026 r.weaknesses[0]) || '—')}</td>
+    <td>${esc((r.weaknesses && r.weaknesses[0]) || '—')}</td>
   </tr>`).join('');
   $('compareTable').innerHTML = rows.length
     ? `<table class="compareTable"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`
