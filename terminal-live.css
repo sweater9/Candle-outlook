@@ -1,0 +1,12 @@
+/* Provider chip + API base (Twelve Data / Alpaca proxy wiring) */
+.providerChip{font-size:10px;font-weight:850;letter-spacing:.06em;text-transform:uppercase;padding:6px 9px;border-radius:999px;border:1px solid var(--line);background:#101821;color:var(--muted);white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.providerChip.on{color:#cfe0ff;border-color:#2a4570;background:#122038}
+.providerChip.alpaca{color:#6fe4bf;border-color:#1e725d;background:#0d221c}
+.providerChip.twelvedata{color:#8bb6ff;border-color:#2a4570;background:#122038}
+.providerChip.binance{color:#f1ce78;border-color:#6e5d2c;background:#1a170e}
+.providerChip.yahoo{color:#c8d2db;border-color:#314152;background:#121a22}
+.providerChip.csv,.providerChip.demo{color:var(--muted)}
+.apiBox{display:grid;gap:4px}
+.apiLabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:800}
+.apiInput{width:100%;height:32px;font-size:11px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10px;color:#b7c6d6}
