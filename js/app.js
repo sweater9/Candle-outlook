@@ -6,7 +6,7 @@ import { bootLiveHandoff } from './live-handoff.js';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '\u0026quot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&&#113;uot;', "'": '&#39;' }[c]));
 
 const slots = {};
 let focusTf = '1h';
