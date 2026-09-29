@@ -317,6 +317,12 @@ def candles():
         return jsonify({"error": "upstream_failed", "message": str(e)}), 502
 
 
+import meridian_api  # noqa: E402
+
+meridian_api.init(fetch_twelvedata)
+app.register_blueprint(meridian_api.bp)
+
+
 @app.errorhandler(404)
 def not_found(_e):
     return jsonify({"error": "not_found", "message": "Unknown route"}), 404
