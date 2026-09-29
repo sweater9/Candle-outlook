@@ -1,8 +1,8 @@
 """
 Candle Outlook — market-data candle proxy.
 
-Keeps Twelve Data + Alpaca API keys server-side. The static GitHub Pages
-site calls GET /api/candles; keys never ship to the browser.
+Keeps Twelve Data + Alpaca API keys server-side; yfinance needs no key.
+The static GitHub Pages site calls GET /api/candles; secrets never ship to the browser.
 """
 
 from __future__ import annotations
@@ -68,22 +68,23 @@ def rate_limit(fn):
 
 # Terminal TF labels → provider intervals
 INTERVAL_MAP = {
-    "1m": {"twelvedata": "1min", "alpaca": "1Min"},
-    "1min": {"twelvedata": "1min", "alpaca": "1Min"},
-    "5m": {"twelvedata": "5min", "alpaca": "5Min"},
-    "5min": {"twelvedata": "5min", "alpaca": "5Min"},
-    "15m": {"twelvedata": "15min", "alpaca": "15Min"},
-    "15min": {"twelvedata": "15min", "alpaca": "15Min"},
-    "30m": {"twelvedata": "30min", "alpaca": "30Min"},
-    "1h": {"twelvedata": "1h", "alpaca": "1Hour"},
-    "60m": {"twelvedata": "1h", "alpaca": "1Hour"},
-    "4h": {"twelvedata": "4h", "alpaca": "4Hour"},
-    "1d": {"twelvedata": "1day", "alpaca": "1Day"},
-    "1D": {"twelvedata": "1day", "alpaca": "1Day"},
-    "1day": {"twelvedata": "1day", "alpaca": "1Day"},
-    "1w": {"twelvedata": "1week", "alpaca": "1Week"},
-    "1W": {"twelvedata": "1week", "alpaca": "1Week"},
-    "1week": {"twelvedata": "1week", "alpaca": "1Week"},
+    # yfinance: native interval; optional aggregate_n builds higher TF (e.g. 4h from 1h)
+    "1m": {"twelvedata": "1min", "alpaca": "1Min", "yfinance": "1m", "yf_period": "7d"},
+    "1min": {"twelvedata": "1min", "alpaca": "1Min", "yfinance": "1m", "yf_period": "7d"},
+    "5m": {"twelvedata": "5min", "alpaca": "5Min", "yfinance": "5m", "yf_period": "60d"},
+    "5min": {"twelvedata": "5min", "alpaca": "5Min", "yfinance": "5m", "yf_period": "60d"},
+    "15m": {"twelvedata": "15min", "alpaca": "15Min", "yfinance": "15m", "yf_period": "60d"},
+    "15min": {"twelvedata": "15min", "alpaca": "15Min", "yfinance": "15m", "yf_period": "60d"},
+    "30m": {"twelvedata": "30min", "alpaca": "30Min", "yfinance": "30m", "yf_period": "60d"},
+    "1h": {"twelvedata": "1h", "alpaca": "1Hour", "yfinance": "1h", "yf_period": "730d"},
+    "60m": {"twelvedata": "1h", "alpaca": "1Hour", "yfinance": "1h", "yf_period": "730d"},
+    "4h": {"twelvedata": "4h", "alpaca": "4Hour", "yfinance": "1h", "yf_period": "730d", "yf_aggregate": 4},
+    "1d": {"twelvedata": "1day", "alpaca": "1Day", "yfinance": "1d", "yf_period": "2y"},
+    "1D": {"twelvedata": "1day", "alpaca": "1Day", "yfinance": "1d", "yf_period": "2y"},
+    "1day": {"twelvedata": "1day", "alpaca": "1Day", "yfinance": "1d", "yf_period": "2y"},
+    "1w": {"twelvedata": "1week", "alpaca": "1Week", "yfinance": "1wk", "yf_period": "5y"},
+    "1W": {"twelvedata": "1week", "alpaca": "1Week", "yfinance": "1wk", "yf_period": "5y"},
+    "1week": {"twelvedata": "1week", "alpaca": "1Week", "yfinance": "1wk", "yf_period": "5y"},
 }
 
 
@@ -250,6 +251,97 @@ def fetch_alpaca(symbol: str, interval_key: str, limit: int) -> dict:
     return {"provider": "alpaca", "symbol": symbol, "interval": interval_key, "candles": candles}
 
 
+
+def _yf_available() -> bool:
+    try:
+        import yfinance  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _yahoo_symbol(symbol: str) -> str:
+    """Map common terminal tickers onto Yahoo Finance symbols."""
+    s = symbol.strip().upper()
+    # EURUSD / EUR/USD → EURUSD=X
+    if "/" in s and len(s.replace("/", "")) == 6:
+        return s.replace("/", "") + "=X"
+    if len(s) == 6 and s.isalpha() and not looks_like_us_equity(s) and FOREX_HINT.match(s):
+        return s + "=X"
+    return s
+
+
+def _aggregate_candles(candles: list[dict], n: int) -> list[dict]:
+    if n <= 1:
+        return candles
+    out: list[dict] = []
+    for i in range(0, len(candles), n):
+        chunk = candles[i : i + n]
+        if not chunk:
+            continue
+        out.append(
+            {
+                "time": chunk[0]["time"],
+                "open": chunk[0]["open"],
+                "high": max(c["high"] for c in chunk),
+                "low": min(c["low"] for c in chunk),
+                "close": chunk[-1]["close"],
+                "volume": sum(c.get("volume") or 0 for c in chunk),
+            }
+        )
+    return out
+
+
+def fetch_yfinance(symbol: str, interval_key: str, limit: int) -> dict:
+    try:
+        import yfinance as yf
+    except ImportError as e:
+        raise RuntimeError("yfinance is not installed on the proxy") from e
+
+    meta = INTERVAL_MAP[interval_key]
+    yf_interval = meta["yfinance"]
+    period = meta.get("yf_period") or "1y"
+    ysym = _yahoo_symbol(symbol)
+    # Request extra bars when we will aggregate (4h from 1h)
+    agg = int(meta.get("yf_aggregate") or 1)
+    pull = max(int(limit) * max(agg, 1), int(limit))
+    # Cap history call size; yfinance period is the hard limit for intraday
+    ticker = yf.Ticker(ysym)
+    try:
+        df = ticker.history(period=period, interval=yf_interval, auto_adjust=False, actions=False)
+    except Exception as e:
+        raise RuntimeError(f"yfinance: {e}") from e
+    if df is None or getattr(df, "empty", True):
+        raise RuntimeError(f"yfinance returned no candles for {ysym}")
+
+    candles: list[dict] = []
+    for idx, row in df.iterrows():
+        try:
+            if hasattr(idx, "to_pydatetime"):
+                ts = idx.to_pydatetime()
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                else:
+                    ts = ts.astimezone(timezone.utc)
+                time_iso = ts.isoformat()
+            else:
+                time_iso = _iso(idx)
+            c = _candle(time_iso, row.get("Open"), row.get("High"), row.get("Low"), row.get("Close"), row.get("Volume"))
+            if c:
+                candles.append(c)
+        except Exception:
+            continue
+    candles.sort(key=lambda x: x["time"])
+    if agg > 1:
+        candles = _aggregate_candles(candles, agg)
+    if limit and len(candles) > limit:
+        candles = candles[-limit:]
+    if not candles:
+        raise RuntimeError(f"yfinance returned no usable OHLC for {ysym}")
+    return {"provider": "yfinance", "symbol": symbol, "interval": interval_key, "candles": candles}
+
+
 @app.get("/api/health")
 def health():
     return jsonify(
@@ -259,6 +351,7 @@ def health():
             "providers": {
                 "twelvedata": bool(TWELVEDATA_API_KEY),
                 "alpaca": bool(ALPACA_API_KEY and ALPACA_API_SECRET),
+                "yfinance": _yf_available(),
             },
         }
     )
@@ -279,8 +372,8 @@ def candles():
         return jsonify({"error": "bad_request", "message": "limit must be an integer"}), 400
     limit = max(1, min(limit, 5000))
     provider = (request.args.get("provider") or "auto").strip().lower()
-    if provider not in {"auto", "twelvedata", "alpaca"}:
-        return jsonify({"error": "bad_request", "message": "provider must be auto|twelvedata|alpaca"}), 400
+    if provider not in {"auto", "twelvedata", "alpaca", "yfinance"}:
+        return jsonify({"error": "bad_request", "message": "provider must be auto|twelvedata|alpaca|yfinance"}), 400
 
     errors: list[str] = []
 
@@ -290,28 +383,38 @@ def candles():
     def try_td():
         return fetch_twelvedata(symbol, interval_key, limit)
 
+    def try_yf():
+        return fetch_yfinance(symbol, interval_key, limit)
+
     try:
         if provider == "alpaca":
             return jsonify(try_alpaca())
         if provider == "twelvedata":
             return jsonify(try_td())
+        if provider == "yfinance":
+            return jsonify(try_yf())
 
-        # auto: US equities/ETFs → Alpaca first, else Twelve Data
+        # auto: US equities → Alpaca, then Twelve Data, then keyless yfinance
         if looks_like_us_equity(symbol) and ALPACA_API_KEY and ALPACA_API_SECRET:
             try:
                 return jsonify(try_alpaca())
             except Exception as e:
                 errors.append(str(e))
-        try:
-            return jsonify(try_td())
-        except Exception as e:
-            errors.append(str(e))
-            # last resort: Alpaca even for non-equity if configured
-            if ALPACA_API_KEY and ALPACA_API_SECRET and "Alpaca" not in "".join(errors):
-                try:
-                    return jsonify(try_alpaca())
-                except Exception as e2:
-                    errors.append(str(e2))
+        if TWELVEDATA_API_KEY:
+            try:
+                return jsonify(try_td())
+            except Exception as e:
+                errors.append(str(e))
+        if ALPACA_API_KEY and ALPACA_API_SECRET and "Alpaca" not in "".join(errors):
+            try:
+                return jsonify(try_alpaca())
+            except Exception as e2:
+                errors.append(str(e2))
+        if _yf_available():
+            try:
+                return jsonify(try_yf())
+            except Exception as e3:
+                errors.append(str(e3))
         return jsonify({"error": "upstream_failed", "message": "; ".join(errors) or "No provider succeeded"}), 502
     except Exception as e:
         return jsonify({"error": "upstream_failed", "message": str(e)}), 502
