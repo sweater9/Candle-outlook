@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meridian · Candle Outlook</title>
+<meta name="description" content="Static snapshot clone of the Meridian (TradeLogic Terminal) Base44 app: dashboard, scanner and setup analysis.">
+<style>
+:root{--bg:#f8fafc;--card:#fff;--ink:#1e293b;--mute:#94a3b8;--soft:#64748b;--line:#e2e8f0;--nav:#0b1220;--sky:#0284c7;--up:#059669;--down:#e11d48;--amber:#d97706;--orange:#c2410c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{background:var(--nav);color:#fff;display:flex;align-items:center;gap:16px;padding:0 20px;height:56px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:8px;font-weight:600;letter-spacing:-.01em}
+.logo i{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#38bdf8,#34d399)}
+nav{display:flex;gap:4px;margin-left:12px}
+nav button{background:none;border:0;color:#cbd5e1;padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.on{background:#1e293b;color:#fff}
+header a{margin-left:auto;color:#7dd3fc;text-decoration:none;font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:24px 20px}
+.view{display:none}.view.on{display:block}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.card{background:var(--card);border-radius:16px;box-shadow:0 0 0 1px rgba(226,232,240,.7);overflow:hidden}
+.pad{padding:20px}
+.lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+.big{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:8px;letter-spacing:-.02em}
+.sub{font-size:12px;color:var(--mute);margin-top:4px}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:20px}
+.side{display:grid;gap:20px;align-content:start}
+.ch{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #f1f5f9}
+h2{margin:0;font-size:15px;font-weight:600;color:#334155}
+.ch a,.link{color:var(--sky);font-size:12px;font-weight:500;cursor:pointer;background:none;border:0;padding:0}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:500;padding:10px 12px;border-bottom:1px solid #f1f5f9}
+td{padding:12px;border-bottom:1px solid #f8fafc}
+th:first-child,td:first-child{padding-left:20px}th:last-child,td:last-child{padding-right:20px}
+.r{text-align:right}.c{text-align:center}.n{font-variant-numeric:tabular-nums}
+.sym{font-weight:600;color:var(--ink);cursor:pointer;background:none;border:0;padding:0;font:inherit;font-weight:600}
+.sym:hover{color:var(--sky)}
+.up{color:var(--up);font-weight:500}.dn{color:var(--down);font-weight:500}
+.setup{font-size:12px;color:var(--soft)}
+.score{font-weight:700;font-size:12px;color:var(--amber);border-radius:6px;padding:2px 8px;box-shadow:0 0 0 1px var(--line)}
+.score small{color:#cbd5e1;font-weight:400}
+.tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;letter-spacing:.03em}
+.EARLY{background:#fffbeb;color:#b45309;box-shadow:inset 0 0 0 1px #fde68a}
+.EXTENDED{background:#fff7ed;color:var(--orange);box-shadow:inset 0 0 0 1px #fed7aa}
+.kv{display:flex;justify-content:space-between;padding:6px 0;font-size:13px}
+.kv span:first-child{color:var(--soft)}.kv .na{color:var(--mute);font-size:12px}
+.note{font-size:11px;color:var(--mute);line-height:1.6;margin-top:6px}
+select,.btn{font:inherit;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:#fff}
+.btn{background:var(--nav);color:#fff;border-color:var(--nav);cursor:pointer}
+.bar{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap}
+.empty{text-align:center;padding:64px 20px;color:var(--soft)}
+.empty h3{margin:0 0 4px;color:#334155}
+.big2{display:grid;grid-template-columns:2fr 1fr;gap:20px}
+.rng{display:flex;gap:4px;margin:12px 0}.rng span{padding:4px 10px;border-radius:8px;font-size:12px;color:var(--soft);background:#f1f5f9}.rng .on{background:var(--nav);color:#fff}
+.chart{height:220px;border-radius:12px;background:#f8fafc;display:grid;place-items:center;color:var(--mute);font-size:12px}
+.mono{white-space:pre-wrap;color:var(--soft);font-size:13px}
+.foot{font-size:11px;color:var(--mute);margin-top:24px;text-align:center}
+@media(max-width:800px){.stats{grid-template-columns:1fr 1fr}.grid,.big2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i>Meridian</div>
+  <nav>
+    <button class="on" data-v="dash">Dashboard</button>
+    <button data-v="scan">Scan</button>
+    <button data-v="analyze">Analyze</button>
+  </nav>
+  <a href="index.html">← Candle Outlook</a>
+</header>
+<main>
+
+<section class="view on" id="dash">
+  <div class="stats">
+    <div class="card pad"><div class="lbl">Markets Scanned</div><div class="big">38</div><div class="sub">S&amp;P 500 — Core Large Caps</div></div>
+    <div class="card pad"><div class="lbl">Qualified Setups</div><div class="big" style="color:var(--up)">0</div><div class="sub">12 shown below</div></div>
+    <div class="card pad"><div class="lbl">Top Setup Score</div><div class="big" style="color:var(--sky)">55</div><div class="sub">AAPL</div></div>
+    <div class="card pad"><div class="lbl">Watchlist Items</div><div class="big">3</div><div class="sub">Tracking changes</div></div>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <div class="ch"><h2>Top Setups</h2><button class="link" data-go="scan">Run scan →</button></div>
+      <div class="tw"><table id="setups"></table></div>
+    </div>
+    <div class="side">
+      <div class="card pad"><h2>Market Regime</h2>
+        <div style="margin-top:12px">
+          <div class="kv"><span>S&amp;P 500 trend</span><span class="na">Data unavailable</span></div>
+          <div class="kv"><span>Nasdaq trend</span><span class="na">Data unavailable</span></div>
+          <div class="kv"><span>Volatility env.</span><span class="na">Data unavailable</span></div>
+          <div class="kv"><span>Market breadth</span><span class="na">Data unavailable</span></div>
+          <p class="note">Market regime populates once an index scan and breadth data are configured.</p>
+        </div>
+      </div>
+      <div class="card pad"><h2>Recent Plans</h2><p style="color:var(--mute);margin:12px 0 0">No trade plans generated yet.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="view" id="scan">
+  <div class="bar">
+    <label class="lbl">Universe</label>
+    <select><option>S&amp;P 500 — Core Large Caps · 38 symbols</option><option>Nasdaq — Core Growth · 30 symbols</option><option>Major US ETFs · 25 symbols</option></select>
+    <button class="btn" id="run">Run Scan</button>
+  </div>
+  <div class="card"><div class="empty" id="scanOut"><h3>Ready to scan</h3>Select a universe and run a scan. Results are ranked by Setup Score with a fully traceable breakdown.</div></div>
+</section>
+
+<section class="view" id="analyze">
+  <div class="bar"><button class="link" data-go="dash">← Back</button><strong style="font-size:18px">AAPL</strong><span class="n">$341.07</span><span class="up">+1.53%</span></div>
+  <div class="big2">
+    <div class="card pad">
+      <div class="rng"><span>1D</span><span>5D</span><span>1M</span><span>3M</span><span class="on">6M</span><span>1Y</span><span>5Y</span></div>
+      <div class="chart">Price chart (EMA 20 · EMA 50 · SMA 200) — live data not bundled in this static clone</div>
+      <h2 style="margin-top:24px">Setup Analysis <span class="tag EXTENDED">EXTENDED</span></h2>
+      <div class="kv"><span>Type</span><span>MOMENTUM</span></div>
+      <div class="kv"><span>Score</span><span class="score">44<small>/100</small></span></div>
+      <p class="note">20-day return 8.4% with RSI 66 and MACD above its signal line.</p>
+      <h2 style="margin-top:24px">Technical Thesis</h2>
+      <p class="mono">Trend is up with momentum strong. Price is above its 20- and 50-day moving averages. RSI is 66 and the 14-day ATR is 6.98 (2.0% of price). Nearest support is 309.40 and resistance is 345.34. Detected setup: MOMENTUM. Price is -1.2% from its 52-week high.</p>
+      <p class="note">Generated from calculated indicators only. No levels or values are invented by AI.</p>
+      <h2 style="margin-top:24px">Calculation Details</h2>
+      <p class="mono">• Trend: derived from price vs EMA20, EMA50 &amp; SMA200.
+• RSI: 14-period Wilder's smoothing.
+• MACD: EMA12 − EMA26, 9-period signal.
+• ATR: 14-period Wilder's average true range.
+• Support/Resistance: 20-bar swing high/low (excl. current bar).
+• Setup Score: weighted sum — Technical 35, Momentum 20, Fundamentals 15, Catalysts 10, Risk/Reward 20.</p>
+    </div>
+    <div class="card pad"><h2>Indicators</h2><div style="margin-top:12px" id="ind"></div>
+      <p class="note">End of day · Twelve Data</p>
+      <p class="note">Research &amp; decision support only. Not investment advice. No automated trade execution.</p>
+    </div>
+  </div>
+</section>
+
+<p class="foot">Static snapshot of tradelogic-createdby-nav.base44.app captured 2026-09-29. Figures are a point-in-time copy, not live data.</p>
+</main>
+<script>
+const rows=[["AAPL",337.15,1.43,"TREND CONTINUATION",55,"EARLY"],["CVX",213.81,1.91,"MOMENTUM",55,"EXTENDED"],["XLK",195.01,-0.64,"TREND CONTINUATION",55,"EARLY"],["QQQ",738.38,-0.82,"TREND CONTINUATION",53,"EXTENDED"],["XLK",187.97,0.37,"TREND CONTINUATION",53,"EARLY"],["NVDA",225.56,-2.08,"TREND CONTINUATION",53,"EARLY"],["XLK",187.87,0,"TREND CONTINUATION",53,"EARLY"],["XLK",187.87,0,"TREND CONTINUATION",53,"EARLY"],["XLK",188.05,0.41,"TREND CONTINUATION",53,"EARLY"],["XLK",187.87,0,"TREND CONTINUATION",53,"EARLY"]];
+const ind=[["Trend","UP"],["Momentum","STRONG"],["RSI (14)","65.7"],["MACD","6.212"],["ATR (14)","$6.98"],["Volatility (ann.)","21.6%"],["Volume vs 20-day","0.70×"],["Support","$309.40"],["Resistance","$345.34"],["52-wk High","$345.34"],["Dist. from 52-wk high","-1.2%"],["Risk/Reward (to S/R)","0.13 : 1"]];
+const $=s=>document.querySelector(s);
+$("#setups").innerHTML="<thead><tr><th>Symbol</th><th class=r>Price</th><th class=r>Chg</th><th>Setup</th><th class=c>Score</th><th>Status</th></tr></thead><tbody>"+rows.map(r=>`<tr><td><button class=sym data-go=analyze>${r[0]}</button></td><td class="r n">$${r[1].toFixed(2)}</td><td class="r n ${r[2]<0?"dn":"up"}">${r[2]<0?"":"+"}${r[2].toFixed(2)}%</td><td class=setup>${r[3]}</td><td class=c><span class=score>${r[4]}<small>/100</small></span></td><td><span class="tag ${r[5]}">${r[5]}</span></td></tr>`).join("")+"</tbody>";
+$("#ind").innerHTML=ind.map(i=>`<div class=kv><span>${i[0]}</span><span class=n>${i[1]}</span></div>`).join("");
+function show(v){document.querySelectorAll(".view").forEach(e=>e.classList.toggle("on",e.id===v));document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));scrollTo(0,0)}
+document.addEventListener("click",e=>{const t=e.target.closest("[data-v],[data-go]");if(t)show(t.dataset.v||t.dataset.go)});
+$("#run").onclick=()=>{$("#scanOut").innerHTML="<h3>Live scanning is not available in this static clone</h3>Showing the last captured results on the Dashboard.";};
+</script>
+</body>
+</html>
