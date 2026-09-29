@@ -8,3 +8,6 @@ reference and does not build here. `../meridian.html` is the runnable static sna
 
 `src/pages/Dashboard.jsx` is the dashboard page. It also needs the `Setup`, `ScanRun`,
 `Watchlist` and `TradePlan` entities.
+
+`components.json` is the shadcn/ui config (new-york style, JSX, Tailwind, lucide icons, `@/` aliases). It is
+not the app's `src/components/` folder, which is still missing.
