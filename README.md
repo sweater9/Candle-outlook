@@ -32,7 +32,7 @@ Chart overlays show support/resistance, confirmation, stop and targets that lie 
 
 ### Journal and offline installation
 
-Existing v3 journal entries migrate to IndexedDB on the first successful load; the original localStorage copy is retained. IndexedDB stores are still local browser data and can be cleared/evicted, so export backups regularly. Imports are validated before saving and merge by ID. Saving confirms only after the storage transaction succeeds. A stale tab cannot overwrite another tab’s changes; reload it before retrying.
+Existing v3 journal entries migrate to IndexedDB on the first successful load; the original localStorage copy is retained. IndexedDB stores are still local browser data and can be cleared/evicted, so export backups regularly. Imports are validated before saving and merge by ID. Saving confirms only after the storage transaction succeeds. With IndexedDB, a stale tab cannot overwrite another tab’s changes; reload it before retrying.
 
 The site caches the analyzer/terminal and required assets after a successful online visit via a service worker, and includes an installable app manifest. It can then reload offline without contacting market-data providers. New cache versions activate after existing tabs close. The legacy Meridian/screenshot pages are not precached. No broker integration, external AI service or data subscription is required.
 

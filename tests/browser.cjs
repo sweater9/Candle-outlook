@@ -6,8 +6,8 @@ const base=process.env.TEST_BASE_URL||'http://127.0.0.1:8765';
 const csv='time,open,high,low,close,volume\n'+Array.from({length:180},(_,i)=>{const close=100+Math.sin(i/4)*4+i*.06;return [new Date(Date.UTC(2026,0,1,0,i*5)).toISOString(),close-.2,close+.6,close-.8,close,100+i].join(',')}).join('\n');
 async function run(name,engine){
   let browser;try{browser=await engine.launch({headless:true,...(name==='chromium'&&process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}: {})});}catch(e){if(process.env.ALLOW_BROWSER_SKIP==='1'){console.log(`BLOCKED ${name}: ${e.message.split('\n').slice(0,10).join(' ')}`);return;}throw e;}
-  try{for(const width of [1280,375]){
-    const context=await browser.newContext({viewport:{width,height:900}});const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[],failed=[],external=[];
+  let lastPage;try{for(const width of [1280,375]){
+    const context=await browser.newContext({viewport:{width,height:900}});const page=await context.newPage();lastPage=page;page.setDefaultTimeout(15000);const errors=[],failed=[],external=[];
     page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failed.push(r.url()));page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:'))external.push(r.url());});
     console.log('START',name,width);await page.goto(base+'/index.html');await page.waitForSelector('.tfTile');
     await page.selectOption('#localInterval','5m');await page.setInputFiles('#localCsv',{name:'replay.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
@@ -17,7 +17,7 @@ async function run(name,engine){
     await page.click('[data-tab="journal"]');assert.equal(await page.locator('.journalCard').count(),1);
     await page.reload();await page.waitForSelector('.tfTile');await page.click('[data-tab="journal"]');assert.equal(await page.locator('.journalCard').count(),1);
     await page.setInputFiles('#importJournalFile',{name:'invalid.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({entries:[{id:'unsafe',decision:'broken'}]}))});await page.waitForFunction(()=>document.querySelector('#importStatus').textContent.includes('Import failed'));assert.equal(await page.locator('.journalCard').count(),1);
-    await page.click('[data-tab="analyze"]');await page.setInputFiles('#localCsv',{name:'replay.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.click('#replayAll');await page.getByText('Backtest revealed history',{exact:true}).click();await page.click('#backtestRun');await page.waitForFunction(()=>document.querySelector('#backtestResult').textContent.includes('closed trades'));assert.match(await page.locator('#backtestResult').textContent(),/Hypothetical/);
+    await page.click('[data-tab="analyze"]');await page.selectOption('#localInterval','5m');await page.setInputFiles('#localCsv',{name:'replay.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('30/180'));await page.click('#replayAll');await page.getByText('Backtest revealed history',{exact:true}).click();await page.click('#backtestRun');await page.waitForFunction(()=>document.querySelector('#backtestResult').textContent.includes('closed trades'));assert.match(await page.locator('#backtestResult').textContent(),/Hypothetical/);
     await page.selectOption('#localTarget','15m');await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('60 completed 15m'));
     await page.click('#useScreenshots');
     const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=800;c.height=400;const x=c.getContext('2d');x.fillStyle='#071019';x.fillRect(0,0,800,400);for(let i=0;i<35;i++){const cx=60+i*19,y=80+(i%9)*17; x.fillStyle=i%2?'#ff7180':'#36d9a8';x.fillRect(cx,y,2,85);x.fillRect(cx-4,y+10,10,30);}return c.toDataURL('image/png').split(',')[1];});
@@ -38,6 +38,6 @@ async function run(name,engine){
     assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);assert.deepEqual(external,[]);
     console.log(`PASS ${name} ${width}px: CSV, replay, backtest, journal/reload, screenshot correction/log calibration, offline reload, timeframe aggregation, OHLC handoff, overflow, JS/network checks`);
     await context.close();
-  }}finally{await browser.close();}
+  }}catch(e){if(lastPage&&!lastPage.isClosed()){fs.mkdirSync('test-results',{recursive:true});await lastPage.screenshot({path:`test-results/${name}-failure.png`,fullPage:true}).catch(()=>{});console.error('App status at failure:',await lastPage.locator('#localStatus').textContent().catch(()=>''));}throw e;}finally{await browser.close();}
 }
 (async()=>{if(!process.env.TEST_BASE_URL){server=http.createServer((req,res)=>{const pathname=decodeURIComponent(new URL(req.url,base).pathname);const file=path.resolve('.','.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(process.cwd()+path.sep)){res.writeHead(403).end();return;}fs.readFile(file,(err,data)=>{if(err){res.writeHead(404).end();return;}const ext=path.extname(file);res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'}[ext]||'application/octet-stream'));res.end(data);});});await new Promise(resolve=>server.listen(8765,'127.0.0.1',resolve));}const names=(process.env.BROWSERS||'chromium,firefox,webkit').split(',');for(const name of names)await run(name,{chromium,firefox,webkit}[name]);})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server?.close());
