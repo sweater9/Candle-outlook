@@ -1,4 +1,4 @@
-# Candle Outlook — Chart Analysis & Trade-Plan Terminal (v3)
+# Candle Outlook — Chart Analysis & Trade-Plan Terminal (v4 · offline tools)
 
 Candle Outlook turns a candlestick chart screenshot into a structured, explainable technical read: market structure, a deterministic setup-quality scorecard, a scenario-based decision, and an explicit trade plan — never a single opaque "AI confidence" number.
 
@@ -7,6 +7,41 @@ Production entry point: `index.html`
 Live market-data terminal: `terminal.html` (Twelve Data / Alpaca / yfinance via candle proxy, with Binance / Yahoo / CSV / demo fallbacks)
 
 Legacy V6 screenshot analyzer (kept for reference): `screenshot.html`
+
+## Offline analysis enhancements
+
+The production analyzer and terminal work without external market-data APIs. The terminal **starts in offline mode**, with clearly labeled synthetic daily demo data; enabling online providers is an explicit choice. Existing provider integrations remain optional.
+
+### Local CSV, replay and backtest
+
+1. Open `index.html` and expand **Local OHLC · replay & backtest**.
+2. Choose the CSV’s original interval, then import at least 30 candles with `time` (or `date`, `timestamp`, `datetime`), `open`, `high`, `low`, `close`, and optional `volume` columns. ISO timestamps with explicit timezone are preferred. Bare ISO dates/times are interpreted as UTC; Unix seconds/milliseconds are accepted. Quoted fields and UTF-8 BOMs are supported.
+3. Reveal one candle at a time, move the slider, or reveal all. The chart, indicators, scorecard and analysis see only revealed candles.
+4. Higher timeframes aggregate actual OHLCV into UTC buckets. Intraday/day buckets start at UTC boundaries; weeks start Monday 00:00 UTC. Only buckets whose start/end fit within revealed source data are used. Missing source bars are not invented; these are UTC buckets, **not exchange-session/calendar aggregation**. Lower timeframes are unavailable, and inconsistent source intervals are rejected.
+5. Expand **Backtest revealed history** and configure fees/slippage in basis points per side. The engine tests its directional BUY/SELL decisions on revealed OHLC only, with signals at close, entry at next open, one position at a time and fixed stop/target 1. Stops crossed by opening gaps fill at the adverse open; target fills use the target price. If both levels are touched in one candle, the stop wins. A new signal may be formed at that candle’s close after an exit. Open positions are excluded from closed-trade statistics. Results show net R, expectancy, win rate and closed-trade drawdown in R; no compounding or capital/margin model is assumed. Backtests are capped at 5,000 candles. Small samples are labeled.
+
+The terminal also validates CSV input and resamples imported data when changing timeframes. Its local multi-timeframe panel uses imported candles rather than provider requests. Unsupported lower intervals and insufficient completed history do not relabel the existing series.
+
+### Screenshot adjustments and calibration
+
+Use **Adjust chart reading** on each tile to crop out volume/indicator panels, choose custom bullish/bearish colors, preview detected candles, and click false detections to remove them. Body placement is derived from contiguous colored body rows rather than assuming it is centered within the wick. Reset adjustments restores excluded candles and the default crop/colors.
+
+Choose **Pick two price references**, click the higher y-axis mark then the lower mark, and enter their actual prices in the calibration fields. Choose linear or logarithmic scale (log requires positive prices). Without selected marks, the entered values must correspond to the highest/lowest **detected candle wicks**, not arbitrary axis limits. Calibration references are preserved when analysis selects its most recent 60 candles. Imported OHLC uses its exact coordinate mapping automatically. Screenshot extraction and its confidence scores remain deterministic estimates, not calibrated probabilities or reconstructed exchange data.
+
+Chart overlays show support/resistance, confirmation, stop and targets that lie inside the visible chart. Position sizing supports contract/value multiplier, quantity increments, conservative stop rounding to a price tick, and round-trip fees per unit. It does not model margin, FX conversion or portfolio exposure.
+
+### Journal and offline installation
+
+Existing v3 journal entries migrate to IndexedDB on the first successful load; the original localStorage copy is retained. IndexedDB stores are still local browser data and can be cleared/evicted, so export backups regularly. Imports are validated before saving and merge by ID. Saving confirms only after the storage transaction succeeds. A stale tab cannot overwrite another tab’s changes; reload it before retrying.
+
+The site caches the analyzer/terminal and required assets after a successful online visit via a service worker, and includes an installable app manifest. It can then reload offline without contacting market-data providers. New cache versions activate after existing tabs close. The legacy Meridian/screenshot pages are not precached. No broker integration, external AI service or data subscription is required.
+
+### Verification
+
+- `npm test`: focused CSV, resampling, calibration, indicator, sizing, journal-input and backtest tests.
+- `npm ci && npx playwright install`: install development-only browser tooling.
+- `npm run test:browser`: starts its own local static server, then exercises Chromium, Firefox and WebKit at 1280px and 375px. `BROWSERS=firefox` selects one engine.
+- `.github/workflows/test.yml`: engine/syntax checks on Linux and a macOS browser matrix, on pull requests and main pushes. Production remains static JavaScript; npm dependencies are only for verification.
 
 ## Workflow
 
@@ -44,7 +79,7 @@ Every directional read gets an explicit Bias / Confirmation / Invalidation / Sto
 
 ### Journal, comparison & post-trade analysis
 
-Save any analysis as a journal snapshot, record what actually happened (target hit / invalidated / sideways / false breakout), and Candle Outlook computes historical follow-through rates grouped by pattern + decision + volume context — strictly from your own recorded samples, never fabricated. Select saved setups for a side-by-side comparison table. Upload a later screenshot of a saved setup and the engine checks the new price against the original target/invalidation levels (when both charts are calibrated) and reports what changed. The journal is localStorage-only, so export/import buttons on the Journal tab give it a portable JSON backup — import merges by entry id, so re-importing never clobbers newer local edits.
+Save any analysis as a journal snapshot, record what actually happened (target hit / invalidated / sideways / false breakout), and Candle Outlook computes historical follow-through rates grouped by pattern + decision + volume context — strictly from your own recorded samples, never fabricated. Select saved setups for a side-by-side comparison table. Upload a later screenshot of a saved setup and the engine checks the new price against the original target/invalidation levels (when both charts are calibrated) and reports what changed. The journal uses IndexedDB with migration from the existing localStorage journal and a localStorage fallback. Save failures are shown explicitly. Export/import buttons on the Journal tab give it a portable JSON backup — import merges by entry id, so re-importing never clobbers newer local edits.
 
 ### Real momentum indicators
 
@@ -73,7 +108,7 @@ Static site is client-side (GitHub Pages). Optional Python candle proxy keeps AP
 index.html            production UI (screenshot + live OHLC analysis)
 css/app.css            styling
 js/app.js               DOM wiring / rendering + live-candle handoff
-js/journal.js           localStorage journal, stats, comparison, post-trade analysis
+js/journal.js           IndexedDB journal, stats, comparison, post-trade analysis
 js/engine/geometry.js   pixel-space candle extraction from the uploaded screenshot
 js/engine/ohlc.js       OHLC → geometry mapping for live terminal candles
 js/engine/structure.js  market-structure engine (swings, HH/HL/LH/LL, events)

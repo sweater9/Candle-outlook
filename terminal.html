@@ -7,6 +7,8 @@
 <meta name="description" content="Interactive market-analysis terminal with candlesticks, technical indicators, multi-timeframe confirmation, scanner, watchlist and BUY/SELL/WAIT chart framing. Primary feed via Twelve Data / Alpaca / yfinance candle proxy; Binance / Yahoo / CSV as fallbacks.">
 <link rel="stylesheet" href="terminal.css">
 <link rel="stylesheet" href="terminal-live.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#071019">
 </head>
 <body>
 <div class="app">
@@ -15,6 +17,8 @@
     <input id="ticker" class="control ticker" value="QQQ" aria-label="Ticker" autocomplete="off">
     <button id="loadTicker" class="btn primary">Load market</button>
     <button id="demo" class="btn">Demo</button>
+    <label class="control"><input id="offlineMode" type="checkbox" checked> Offline mode</label>
+    <label for="csvInterval">CSV interval</label><select id="csvInterval" class="control" aria-label="Source CSV interval"><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option selected>1D</option><option>1W</option></select>
     <button id="uploadBtn" class="btn">Import CSV</button>
     <input id="csv" type="file" accept=".csv,text/csv" class="hidden">
     <div id="providerChip" class="providerChip" title="Active market-data provider">—</div>
@@ -46,12 +50,12 @@
     </aside>
     <main class="main">
       <div class="toolbar">
-        <span class="tf" data-tf="5m">5m</span>
-        <span class="tf" data-tf="15m">15m</span>
-        <span class="tf" data-tf="1h">1h</span>
-        <span class="tf" data-tf="4h">4h</span>
-        <span class="tf active" data-tf="1D">1D</span>
-        <span class="tf" data-tf="1W">1W</span>
+        <button class="tf" data-tf="5m">5m</button>
+        <button class="tf" data-tf="15m">15m</button>
+        <button class="tf" data-tf="1h">1h</button>
+        <button class="tf" data-tf="4h">4h</button>
+        <button class="tf active" data-tf="1D">1D</button>
+        <button class="tf" data-tf="1W">1W</button>
         <span class="divider"></span>
         <button class="btn primary" data-ind="ema20">EMA20</button>
         <button class="btn primary" data-ind="ema50">EMA50</button>
@@ -101,6 +105,8 @@
     </aside>
   </div>
 </div>
+<script src="js/local-data.js"></script>
+<script src="js/offline.js" defer></script>
 <script src="terminal-part1.js"></script>
 <script src="terminal-part2a.js"></script>
 <script src="terminal-part2a2.js"></script>

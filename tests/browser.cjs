@@ -1,0 +1,43 @@
+const assert=require('node:assert/strict');
+const {chromium,firefox,webkit}=require('playwright');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
+let server;
+const base=process.env.TEST_BASE_URL||'http://127.0.0.1:8765';
+const csv='time,open,high,low,close,volume\n'+Array.from({length:180},(_,i)=>{const close=100+Math.sin(i/4)*4+i*.06;return [new Date(Date.UTC(2026,0,1,0,i*5)).toISOString(),close-.2,close+.6,close-.8,close,100+i].join(',')}).join('\n');
+async function run(name,engine){
+  let browser;try{browser=await engine.launch({headless:true,...(name==='chromium'&&process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}: {})});}catch(e){if(process.env.ALLOW_BROWSER_SKIP==='1'){console.log(`BLOCKED ${name}: ${e.message.split('\n').slice(0,10).join(' ')}`);return;}throw e;}
+  try{for(const width of [1280,375]){
+    const context=await browser.newContext({viewport:{width,height:900}});const page=await context.newPage();page.setDefaultTimeout(15000);const errors=[],failed=[],external=[];
+    page.on('pageerror',e=>errors.push(e.message));page.on('requestfailed',r=>failed.push(r.url()));page.on('request',r=>{if(!r.url().startsWith(base)&&!r.url().startsWith('data:'))external.push(r.url());});
+    console.log('START',name,width);await page.goto(base+'/index.html');await page.waitForSelector('.tfTile');
+    await page.selectOption('#localInterval','5m');await page.setInputFiles('#localCsv',{name:'replay.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
+    await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('30/180'));
+    await page.click('#replayNext');await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('31/180'));
+    await page.click('#saveJournalBtn');await page.waitForFunction(()=>document.querySelector('#saveJournalBtn').textContent.includes('Saved'));
+    await page.click('[data-tab="journal"]');assert.equal(await page.locator('.journalCard').count(),1);
+    await page.reload();await page.waitForSelector('.tfTile');await page.click('[data-tab="journal"]');assert.equal(await page.locator('.journalCard').count(),1);
+    await page.setInputFiles('#importJournalFile',{name:'invalid.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({entries:[{id:'unsafe',decision:'broken'}]}))});await page.waitForFunction(()=>document.querySelector('#importStatus').textContent.includes('Import failed'));assert.equal(await page.locator('.journalCard').count(),1);
+    await page.click('[data-tab="analyze"]');await page.setInputFiles('#localCsv',{name:'replay.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.click('#replayAll');await page.getByText('Backtest revealed history',{exact:true}).click();await page.click('#backtestRun');await page.waitForFunction(()=>document.querySelector('#backtestResult').textContent.includes('closed trades'));assert.match(await page.locator('#backtestResult').textContent(),/Hypothetical/);
+    await page.selectOption('#localTarget','15m');await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('60 completed 15m'));
+    await page.click('#useScreenshots');
+    const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=800;c.height=400;const x=c.getContext('2d');x.fillStyle='#071019';x.fillRect(0,0,800,400);for(let i=0;i<35;i++){const cx=60+i*19,y=80+(i%9)*17; x.fillStyle=i%2?'#ff7180':'#36d9a8';x.fillRect(cx,y,2,85);x.fillRect(cx-4,y+10,10,30);}return c.toDataURL('image/png').split(',')[1];});
+    await page.locator('.tfTile[data-tf="1h"] .fileInput').setInputFiles({name:'chart.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+    const tile=page.locator('.tfTile[data-tf="1h"]');await tile.locator('summary').click();await tile.locator('.detect').click();assert.match(await tile.locator('.editorHint').textContent(),/35 candles/);
+    await tile.locator('.preview').scrollIntoViewIfNeeded();let rect=await tile.locator('.preview').boundingBox();await page.mouse.click(rect.x+60/800*rect.width,rect.y+100/400*rect.height);assert.match(await tile.locator('.editorHint').textContent(),/34 candles/);
+    await tile.locator('.anchors').click();await tile.locator('.preview').scrollIntoViewIfNeeded();rect=await tile.locator('.preview').boundingBox();await page.mouse.click(rect.x+rect.width*.95,rect.y+rect.height*.1);await page.mouse.click(rect.x+rect.width*.95,rect.y+rect.height*.85);await page.fill('#chartHigh','200');await page.fill('#chartLow','100');await page.selectOption('#priceScale','log');await page.click('#analyzeBtn');await page.waitForSelector('#result .decision');assert.ok(await tile.locator('.overlay line').count()>0);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'analyzer overflow');
+    fs.mkdirSync('test-results',{recursive:true});await page.screenshot({path:`test-results/${name}-${width}-analyzer.png`,fullPage:true});
+    await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await page.waitForFunction(()=>!!navigator.serviceWorker.controller);await context.setOffline(true);await page.reload();await page.waitForSelector('.tfTile');await context.setOffline(false);
+    await page.goto(base+'/terminal.html');await page.waitForSelector('#offlineMode');assert.equal(await page.locator('#loadTicker').isDisabled(),true);assert.equal(await page.locator('#offlineMode').isChecked(),true);
+    await page.selectOption('#csvInterval','5m');await page.setInputFiles('#csv',{name:'terminal.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.waitForFunction(()=>document.querySelector('#dataStatus').textContent.includes('180 candles'));
+    await page.click('[data-tf="15m"]');await page.waitForFunction(()=>document.querySelector('#dataStatus').textContent.includes('60 completed 15m'));
+    await page.selectOption('#csvInterval','15m');await page.setInputFiles('#csv',{name:'terminal.csv',mimeType:'text/csv',buffer:Buffer.from(csv.split('\n').filter((_,i)=>i===0||(i-1)%3===0).join('\n'))});await page.waitForFunction(()=>document.querySelector('#dataStatus').textContent.includes('60 candles'));assert.equal(await page.locator('[data-tf="5m"]').isDisabled(),true);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'terminal overflow');await page.screenshot({path:`test-results/${name}-${width}-terminal.png`,fullPage:true});
+    await page.click('#sendAnalysis');await page.waitForURL('**/index.html*');await page.waitForSelector('#result .decision');await page.click('#analyzeBtn');await page.click('#saveJournalBtn');await page.waitForFunction(()=>document.querySelector('#saveJournalBtn').textContent.includes('Saved'));
+    await page.click('#analyzeBtn');await page.evaluate(()=>{window.originalTransaction=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(){throw new DOMException('Simulated quota failure','QuotaExceededError')};});await page.click('#saveJournalBtn');await page.waitForFunction(()=>document.querySelector('#localStatus').textContent.includes('Journal was not saved'));assert.equal(await page.locator('#saveJournalBtn').textContent(),'Save to journal');await page.evaluate(()=>{IDBDatabase.prototype.transaction=window.originalTransaction;});await page.click('#saveJournalBtn');await page.waitForFunction(()=>document.querySelector('#saveJournalBtn').textContent.includes('Saved'));
+    assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);assert.deepEqual(external,[]);
+    console.log(`PASS ${name} ${width}px: CSV, replay, backtest, journal/reload, screenshot correction/log calibration, offline reload, timeframe aggregation, OHLC handoff, overflow, JS/network checks`);
+    await context.close();
+  }}finally{await browser.close();}
+}
+(async()=>{if(!process.env.TEST_BASE_URL){server=http.createServer((req,res)=>{const pathname=decodeURIComponent(new URL(req.url,base).pathname);const file=path.resolve('.','.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(process.cwd()+path.sep)){res.writeHead(403).end();return;}fs.readFile(file,(err,data)=>{if(err){res.writeHead(404).end();return;}const ext=path.extname(file);res.setHeader('Content-Type',({'.html':'text/html','.js':'text/javascript','.css':'text/css','.json':'application/json'}[ext]||'application/octet-stream'));res.end(data);});});await new Promise(resolve=>server.listen(8765,'127.0.0.1',resolve));}const names=(process.env.BROWSERS||'chromium,firefox,webkit').split(',');for(const name of names)await run(name,{chromium,firefox,webkit}[name]);})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server?.close());

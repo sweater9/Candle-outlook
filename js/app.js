@@ -1,3 +1,5 @@
+import { attachEditor } from './screenshot-editor.js';
+import { bootLocalWorkbench } from './local-workbench.js';
 import { extractCandles } from './engine/geometry.js';
 import { runAnalysis } from './engine/analyze.js';
 import { summarizeAlignment } from './engine/mtf.js';
@@ -6,10 +8,12 @@ import { bootLiveHandoff } from './live-handoff.js';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&&#113;uot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const slots = {};
 let focusTf = '1h';
+let localWorkbench;
+let lastOverlay;
 
 // ---------------------------------------------------------------- tiles ---
 function buildTiles() {
@@ -42,6 +46,7 @@ function buildTiles() {
     fileInput.onchange = () => fileInput.files[0] && loadFile(tf, fileInput.files[0]);
 
     slots[tf] = { img, fileInput, drop, status, emptyDiv, overlay };
+    attachEditor(slots[tf], tile, $('cv'));
     grid.appendChild(node);
   });
 }
@@ -51,10 +56,12 @@ function loadFile(tf, file) {
   const reader = new FileReader();
   reader.onload = () => {
     const slot = slots[tf];
+    slot.anchors=[];slot.excluded=[];slot.geo=null;
+    slot.img.onload=()=>{slot.status.textContent='Chart ready';updateAnalyzeEnabled();};
     slot.img.src = reader.result;
     slot.img.hidden = false;
     slot.emptyDiv.hidden = true;
-    slot.status.textContent = 'Chart ready';
+    slot.status.textContent = 'Loading image…';
     slot.overlay.innerHTML = '';
     updateAnalyzeEnabled();
   };
@@ -62,7 +69,7 @@ function loadFile(tf, file) {
 }
 
 function updateAnalyzeEnabled() {
-  $('analyzeBtn').disabled = !TIMEFRAMES.some((tf) => slots[tf].img.src);
+  $('analyzeBtn').disabled = !TIMEFRAMES.some((tf) => slots[tf].img.naturalWidth);
 }
 
 function makeThumbnail(imgEl) {
@@ -78,6 +85,7 @@ function makeThumbnail(imgEl) {
 function drawOverlay(focus, tf, geoH) {
   const slot = slots[tf];
   if (!slot || !slot.img.src || !focus.levels) return;
+  lastOverlay={focus,tf,geoH};
   const box = slot.drop.getBoundingClientRect();
   const ir = slot.img.getBoundingClientRect();
   const sy = ir.height / geoH;
@@ -87,10 +95,12 @@ function drawOverlay(focus, tf, geoH) {
   const lines = [
     [focus.levels.resistanceY, '#ff7180', 'RESISTANCE'],
     [focus.levels.supportY, '#36d9a8', 'SUPPORT'],
+    ...(focus.plan ? [[focus.plan.confirmationY,'#74b8ff','CONFIRM'],[focus.plan.stopY,'#ff7180','STOP'],[focus.plan.t1Y,'#f5c65d','TARGET 1'],[focus.plan.t2Y,'#f5c65d','TARGET 2']] : []),
   ];
-  slot.overlay.innerHTML = lines.map(([y, c, t]) => `
+  const merged=[];for(const line of lines){if(line[0]<0||line[0]>geoH)continue;const same=merged.find(x=>Math.abs(x[0]-line[0])<1);if(same)same[2]+=' / '+line[2];else merged.push([...line]);}
+  slot.overlay.innerHTML = merged.map(([y, c, t]) => `
     <line x1="${left}" x2="${left + ir.width}" y1="${top + y * sy}" y2="${top + y * sy}" stroke="${c}" stroke-width="2" stroke-dasharray="6 4"/>
-    <rect x="${left + 6}" y="${Math.max(2, top + y * sy - 18)}" width="78" height="15" rx="7" fill="#071019dd"/>
+    <rect x="${left + 6}" y="${Math.max(2, top + y * sy - 18)}" width="${t.length*6+12}" height="15" rx="7" fill="#071019dd"/>
     <text x="${left + 12}" y="${Math.max(13, top + y * sy - 7)}" fill="${c}" font-size="9" font-weight="800">${t}</text>
   `).join('');
 }
@@ -101,6 +111,7 @@ function priceOrPixel(levels, y, fallback) {
 
 // -------------------------------------------------------------- analyze ---
 async function runFullAnalysis() {
+  if(localWorkbench?.active){localWorkbench.analyze();return;}
   const uploaded = TIMEFRAMES.filter((tf) => slots[tf].img.src);
   if (!uploaded.length) return;
   const effectiveFocus = uploaded.includes(focusTf) ? focusTf : uploaded[0];
@@ -110,14 +121,15 @@ async function runFullAnalysis() {
   const eventRisk = { flagged: $('eventRiskFlag').checked, text: $('eventRiskText').value.trim() };
   const chartHigh = parseFloat($('chartHigh').value);
   const chartLow = parseFloat($('chartLow').value);
-  const calibration = (isFinite(chartHigh) && isFinite(chartLow) && chartHigh > chartLow) ? { highPrice: chartHigh, lowPrice: chartLow } : null;
+  let calibration = (isFinite(chartHigh) && isFinite(chartLow) && chartHigh > chartLow) ? { highPrice: chartHigh, lowPrice: chartLow } : null;
   const accountSize = parseFloat($('accountSize').value);
   const riskPct = parseFloat($('riskPct').value);
-  const account = (isFinite(accountSize) && isFinite(riskPct) && accountSize > 0 && riskPct > 0) ? { size: accountSize, riskPct } : null;
+  const account = (isFinite(accountSize) && isFinite(riskPct) && accountSize > 0 && riskPct > 0) ? { size: accountSize, riskPct, ...readInstrumentSettings() } : null;
 
   const cv = $('cv');
   const geo = {};
-  for (const tf of uploaded) geo[tf] = extractCandles(slots[tf].img, cv);
+  for (const tf of uploaded) geo[tf] = slots[tf].extract();
+  if(calibration){const anchors=slots[effectiveFocus].anchors;calibration.scale=$('priceScale').value;if(anchors.length===2){calibration.topY=anchors[0]*geo[effectiveFocus].h/100;calibration.bottomY=anchors[1]*geo[effectiveFocus].h/100;}if(calibration.scale==='log'&&chartLow<=0)throw Error('Log calibration requires positive prices.');}
 
   const others = uploaded.filter((tf) => tf !== effectiveFocus);
   const otherResults = {};
@@ -193,12 +205,12 @@ function renderResult(focus, meta) {
       <div class="actionsRow">
         <button class="btn primary" id="saveJournalBtn">Save to journal</button>
       </div>`;
-    $('saveJournalBtn').onclick = () => {
-      const thumb = makeThumbnail(slots[meta.focusTf].img);
-      journal.addEntry(focus, { ticker: meta.ticker, timeframeLabel: meta.focusTf, volumeContext: meta.volumeContext, eventRisk: meta.eventRisk, thumbnail: thumb });
+    $('saveJournalBtn').onclick = handle(async () => {
+      const thumb = makeThumbnail(slots[meta.focusTf]?.img);
+      await journal.addEntry(focus, { ticker: meta.ticker, timeframeLabel: meta.focusTf, volumeContext: meta.volumeContext, eventRisk: meta.eventRisk, thumbnail: thumb, source:meta.provider||'Screenshot' });
       const btn = $('saveJournalBtn');
       if (btn) { btn.textContent = 'Saved ✓'; btn.disabled = true; }
-    };
+    });
     return;
   }
 
@@ -257,8 +269,8 @@ function renderResult(focus, meta) {
 
   const sizing = focus.sizing;
   const sizingHtml = sizing
-    ? `<div class="sizingBox"><b>Position size:</b> risking $${sizing.riskDollars.toFixed(2)} with a stop near $${sizing.stopPrice.toFixed(2)} and entry near $${sizing.entryPrice.toFixed(2)} ≈ <b>${sizing.shares} shares/units</b>.</div>`
-    : '<div class="sizingBox muted">Add the highest/lowest visible price plus account size and risk % on the left to see a position-size calculation.</div>';
+    ? `<div class="sizingBox"><b>Position size:</b> risking $${sizing.riskDollars.toFixed(2)} with a stop near $${sizing.stopPrice.toFixed(2)} and entry near $${sizing.entryPrice.toFixed(2)} (multiplier ${sizing.multiplier}, including unit fees) ≈ <b>${sizing.shares} units</b>.</div>`
+    : '<div class="sizingBox muted">Add price references or imported OHLC plus account size and risk % to see a position-size calculation.</div>';
 
   resultEl.innerHTML = `
     <div class="decision ${cls}">
@@ -326,7 +338,7 @@ function renderResult(focus, meta) {
 
     <div class="section">
       <h3>Limits</h3>
-      <p>This is a chart-derived technical read, not personalized investment advice. ${levels.calibrated ? '' : 'Dollar levels are qualitative here — add the visible high/low on the left for calculated price targets. '}${meta.volumeContext === 'unknown' ? 'Volume was not provided and is treated as neutral. ' : ''}Events outside the screenshot can invalidate this setup.</p>
+      <p>This is a chart-derived technical read, not personalized investment advice. ${levels.calibrated ? '' : 'Dollar levels are qualitative here — add price references on the left for calculated price targets. '}${meta.volumeContext === 'unknown' ? 'Volume was not provided and is treated as neutral. ' : ''}Events outside the screenshot can invalidate this setup.</p>
     </div>
 
     <div class="actionsRow">
@@ -334,12 +346,12 @@ function renderResult(focus, meta) {
     </div>
   `;
 
-  $('saveJournalBtn').onclick = () => {
-    const thumb = makeThumbnail(slots[meta.focusTf].img);
-    journal.addEntry(focus, { ticker: meta.ticker, timeframeLabel: meta.focusTf, volumeContext: meta.volumeContext, eventRisk: meta.eventRisk, thumbnail: thumb });
+  $('saveJournalBtn').onclick = handle(async () => {
+    const thumb = makeThumbnail(slots[meta.focusTf]?.img);
+    await journal.addEntry(focus, { ticker: meta.ticker, timeframeLabel: meta.focusTf, volumeContext: meta.volumeContext, eventRisk: meta.eventRisk, thumbnail: thumb, source:meta.provider||'Screenshot' });
     const btn = $('saveJournalBtn');
     if (btn) { btn.textContent = 'Saved ✓'; btn.disabled = true; }
-  };
+  });
 
   drawOverlay(focus, meta.focusTf, meta.geoH);
 }
@@ -367,16 +379,16 @@ function renderJournal() {
     const followUpHtml = e.followUp
       ? `<div class="small muted" style="margin-top:8px">${e.followUp.notes.map((n) => esc(n)).join('<br>')}</div>`
       : '';
-    return `<div class="journalCard" data-id="${e.id}">
+    return `<div class="journalCard" data-id="${esc(e.id)}">
       <div class="journalCardTop">
         <div style="display:flex;gap:10px;align-items:center">
-          ${e.thumbnail ? `<img class="thumb" src="${e.thumbnail}" alt="">` : ''}
+          ${e.thumbnail ? `<img class="thumb" src="${esc(e.thumbnail)}" alt="">` : ''}
           <div>
             <div class="journalTicker">${esc(e.ticker)} <span class="badge ${cls}">${e.decision}</span></div>
             <div class="journalMeta">${esc(e.timeframeLabel)} · ${new Date(e.savedAt).toLocaleString()} · conviction ${e.conviction}/100</div>
           </div>
         </div>
-        <label class="checkRow"><input type="checkbox" class="compareCheck" value="${e.id}"> Compare</label>
+        <label class="checkRow"><input type="checkbox" class="compareCheck" value="${esc(e.id)}"> Compare</label>
       </div>
       <div class="journalRow"><span>${esc(e.patternName || '—')} · ${esc(e.structureLabel || '—')}</span><span>R:R ${e.rr != null ? `1:${e.rr}` : 'n/a'}</span></div>
       <div class="journalActions">
@@ -392,18 +404,18 @@ function renderJournal() {
   }).join('');
 
   list.querySelectorAll('.outcomeSelect').forEach((sel) => {
-    sel.onchange = () => {
+    sel.onchange = handle(async () => {
       const id = sel.closest('.journalCard').dataset.id;
-      journal.updateOutcome(id, sel.value, '');
+      await journal.updateOutcome(id, sel.value, '');
       renderJournal();
-    };
+    });
   });
   list.querySelectorAll('.deleteBtn').forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = handle(async () => {
       const id = btn.closest('.journalCard').dataset.id;
-      journal.deleteEntry(id);
+      await journal.deleteEntry(id);
       renderJournal();
-    };
+    });
   });
   list.querySelectorAll('.followUpBtn').forEach((btn) => {
     btn.onclick = () => btn.closest('.journalCard').querySelector('.followUpFile').click();
@@ -421,16 +433,16 @@ function handleFollowUpUpload(input) {
   const reader = new FileReader();
   reader.onload = () => {
     const tmpImg = new Image();
-    tmpImg.onload = () => {
+    tmpImg.onload = handle(async () => {
       const { candles, quality } = extractCandles(tmpImg, $('cv'));
       const entries = journal.loadJournal();
       const entry = entries.find((e) => e.id === id);
       if (!entry) return;
 
       let calibration = null;
-      const highStr = window.prompt('Highest visible price on this follow-up chart (Cancel to skip $ calibration):', '');
+      const highStr = window.prompt('Highest detected candle wick price on the follow-up chart (Cancel to skip):', '');
       if (highStr !== null && highStr.trim() !== '') {
-        const lowStr = window.prompt('Lowest visible price on this follow-up chart:', '');
+        const lowStr = window.prompt('Lowest detected candle wick price on this follow-up chart:', '');
         const hi = parseFloat(highStr), lo = parseFloat(lowStr);
         if (isFinite(hi) && isFinite(lo) && hi > lo) calibration = { highPrice: hi, lowPrice: lo };
       }
@@ -440,12 +452,12 @@ function handleFollowUpUpload(input) {
         calibration, volumeContext: entry.volumeContext,
       });
       const evalRes = journal.evaluatePostTrade(entry, followResult);
-      journal.recordFollowUp(id, evalRes);
+      await journal.recordFollowUp(id, evalRes);
       if (evalRes.suggestedOutcome) {
-        journal.updateOutcome(id, evalRes.suggestedOutcome, 'Auto-suggested from follow-up chart.');
+        await journal.updateOutcome(id, evalRes.suggestedOutcome, 'Auto-suggested from follow-up chart.');
       }
       renderJournal();
-    };
+    });
     tmpImg.src = reader.result;
   };
   reader.readAsDataURL(file);
@@ -476,14 +488,15 @@ function switchTab(name) {
 }
 
 // ------------------------------------------------------------------ init --
-function init() {
+async function init() {
+  await journal.initStorage();
   buildTiles();
   document.querySelectorAll('.tab').forEach((t) => { t.onclick = () => switchTab(t.dataset.tab); });
-  $('analyzeBtn').onclick = () => runFullAnalysis();
+  $('analyzeBtn').onclick = () => runFullAnalysis().catch(reportError);
   $('resetBtn').onclick = () => location.reload();
-  $('clearJournalBtn').onclick = () => {
-    if (window.confirm('Clear the entire journal? This cannot be undone.')) { journal.clearJournal(); renderJournal(); }
-  };
+  $('clearJournalBtn').onclick = handle(async () => {
+    if (window.confirm('Clear the entire journal? This cannot be undone.')) { await journal.clearJournal(); renderJournal(); }
+  });
   $('exportJournalBtn').onclick = () => {
     const json = journal.exportJournal();
     const blob = new Blob([json], { type: 'application/json' });
@@ -501,14 +514,14 @@ function init() {
     const file = $('importJournalFile').files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = journal.importJournal(String(reader.result), 'merge');
+    reader.onload = handle(async () => {
+      const result = await journal.importJournal(String(reader.result), 'merge');
       const status = $('importStatus');
       status.textContent = result.ok
         ? `Imported ${result.added} new setup(s), skipped ${result.skipped} already in your journal.`
         : `Import failed: ${result.error}`;
       if (result.ok) renderJournal();
-    };
+    });
     reader.readAsText(file);
     $('importJournalFile').value = '';
   };
@@ -519,7 +532,7 @@ function init() {
     renderCompare(entries);
     switchTab('compare');
   };
-  window.addEventListener('resize', () => TIMEFRAMES.forEach((tf) => { if (slots[tf]) slots[tf].overlay.innerHTML = ''; }));
+  window.addEventListener('resize', () => {if(lastOverlay)drawOverlay(lastOverlay.focus,lastOverlay.tf,lastOverlay.geoH);});
   const live = bootLiveHandoff({
     $,
     TIMEFRAMES,
@@ -529,8 +542,15 @@ function init() {
     renderResult,
     esc,
   });
+  localWorkbench=bootLocalWorkbench({renderResult,slots,live,updateAnalyzeEnabled,readInstrumentSettings});
   live.tryConsumeLiveCandles();
 }
 
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', ()=>init().catch(reportError));
+window.addEventListener('unhandledrejection',e=>{reportError(e.reason);e.preventDefault();});
+window.addEventListener('journal-storage-error',e=>reportError(e.detail));
+export function readInstrumentSettings(){return {multiplier:Number($('contractMultiplier').value),quantityStep:Number($('quantityStep').value),tickSize:Number($('tickSize').value),feePerUnit:Number($('feePerUnit').value)}}
+function reportError(e){const el=$('localStatus');if(el)el.textContent=e?.message||String(e);const status=$('importStatus');if(status)status.textContent=e?.message||String(e);}
+
+function handle(fn){return (...args)=>Promise.resolve().then(()=>fn(...args)).catch(reportError);}

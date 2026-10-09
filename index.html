@@ -7,6 +7,8 @@
 <meta name="description" content="Upload candlestick chart screenshots across multiple timeframes and get a deterministic setup-quality scorecard, market-structure read, scenario-based BUY/SELL/WAIT decision, trade plan and journal.">
 <link rel="stylesheet" href="css/app.css">
 <link rel="stylesheet" href="css/live.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#071019">
 </head>
 <body>
 <div class="shell">
@@ -40,6 +42,16 @@
         <div class="sectionLabel">1 · UPLOAD CHART(S)</div>
         <p class="microNote">Upload at least one chart, or open the live market terminal and use <b>Send to analysis</b> to load real OHLC here. Add more timeframes for multi-timeframe confirmation — a 5-minute signal against a strong 4-hour trend will score lower conviction. Pick which one is the <b>focus timeframe</b> the decision is built around.</p>
 
+        <details class="localWorkbench" open>
+          <summary>Local OHLC · replay &amp; backtest</summary>
+          <p class="microNote">Import timestamped OHLC CSV. Choose its original interval before importing. No market-data requests are made.</p>
+          <div class="fields"><div class="field"><label for="localInterval">CSV source interval</label><select id="localInterval"><option>5m</option><option>15m</option><option>1h</option><option>4h</option><option selected>1D</option><option>1W</option></select></div><div class="field"><label for="localCsv">OHLC CSV</label><input id="localCsv" type="file" accept=".csv,text/csv"></div></div>
+          <div id="replayControls" hidden><div class="fields"><div class="field"><label for="localTarget">Analysis interval</label><select id="localTarget"></select></div><div class="field"><label for="replayPosition">Revealed candles</label><input id="replayPosition" type="range" min="30" value="30"></div></div>
+            <div class="actions"><button id="replayPrev" class="btn tiny secondary">Previous candle</button><button id="replayNext" class="btn tiny secondary">Next candle</button><button id="replayAll" class="btn tiny secondary">Reveal all</button><button id="useScreenshots" class="btn tiny secondary">Use screenshots</button></div>
+            <svg id="localChart" viewBox="0 0 760 300" role="img" aria-label="Revealed OHLC candles"></svg>
+            <details><summary>Backtest revealed history</summary><p class="microNote">Signals at close; entry at next open; one position at a time. Fixed stop/target 1. Both touched in one candle: stop first. UTC aggregation uses completed candles only.</p><div class="fields"><div class="field"><label for="backtestFee">Fee per side (basis points)</label><input id="backtestFee" type="number" min="0" value="5"></div><div class="field"><label for="backtestSlip">Slippage per side (basis points)</label><input id="backtestSlip" type="number" min="0" value="5"></div></div><button id="backtestRun" class="btn secondary small">Run local backtest</button><p id="backtestResult" class="microNote" role="status"></p></details>
+          </div><p id="localStatus" class="microNote" role="status">Screenshots and imported files stay on this device.</p>
+        </details>
         <div class="tfGrid" id="tfGrid"></div>
 
         <div class="fields">
@@ -52,11 +64,12 @@
               <option value="contracting">Contracting</option>
             </select>
           </div>
-          <div class="field"><label>HIGHEST VISIBLE PRICE · OPTIONAL</label><input id="chartHigh" type="number" step="any" placeholder="e.g. 452.10"></div>
-          <div class="field"><label>LOWEST VISIBLE PRICE · OPTIONAL</label><input id="chartLow" type="number" step="any" placeholder="e.g. 438.50"></div>
+          <div class="field"><label>HIGHER REFERENCE PRICE · OPTIONAL</label><input id="chartHigh" type="number" step="any" placeholder="e.g. 452.10"></div>
+          <div class="field"><label>LOWER REFERENCE PRICE · OPTIONAL</label><input id="chartLow" type="number" step="any" placeholder="e.g. 438.50"></div>
         </div>
-        <p class="microNote">Give the highest and lowest price visible on the focus chart's y-axis (read directly off the chart) and every level below gets a real $ value via linear interpolation — nothing is guessed.</p>
+        <p class="microNote">Use Adjust chart reading → Pick two price references on the focus chart, then enter those prices. Without selected marks, the prices must match the highest and lowest detected candle wicks, not the axis limits.</p>
 
+        <div class="field"><label for="priceScale">Screenshot price scale</label><select id="priceScale"><option value="linear">Linear</option><option value="log">Logarithmic (positive prices only)</option></select></div>
         <div class="eventRisk">
           <label class="checkRow"><input type="checkbox" id="eventRiskFlag"> Elevated event risk (earnings, FOMC, CPI, major announcement, etc.)</label>
           <input id="eventRiskText" placeholder="e.g. Earnings tomorrow after close">
@@ -66,6 +79,7 @@
           <div class="field"><label>ACCOUNT SIZE · OPTIONAL</label><input id="accountSize" type="number" step="any" placeholder="e.g. 10000"></div>
           <div class="field"><label>MAX RISK % PER TRADE</label><input id="riskPct" type="number" step="any" placeholder="e.g. 1"></div>
         </div>
+        <details><summary>Instrument sizing settings</summary><div class="fields"><div class="field"><label for="contractMultiplier">Value multiplier per unit</label><input id="contractMultiplier" type="number" min="0" step="any" value="1"></div><div class="field"><label for="quantityStep">Quantity increment</label><input id="quantityStep" type="number" min="0" step="any" value="1"></div><div class="field"><label for="tickSize">Price tick size</label><input id="tickSize" type="number" min="0" step="any" value="0"></div><div class="field"><label for="feePerUnit">Round-trip fee per unit ($)</label><input id="feePerUnit" type="number" min="0" step="any" value="0"></div></div></details>
         <p class="microNote">Position sizing only appears when price is calibrated (above) and both account fields are filled — it is never guessed.</p>
 
         <div class="actions">
@@ -93,7 +107,7 @@
         <input type="file" accept="application/json" id="importJournalFile" class="hidden">
         <button class="btn secondary small" id="clearJournalBtn">Clear journal</button>
       </div>
-      <p class="microNote" id="importStatus"></p>
+      <p class="microNote" id="importStatus" role="status"></p>
       <div id="journalList" class="journalList"></div>
     </section>
   </main>
@@ -106,7 +120,7 @@
     </section>
   </main>
 
-  <div class="footer">BUY / SELL / WAIT is a technical interpretation of the visible chart evidence, not personalized investment advice or a guarantee of future movement. Exact OHLC prices are never fabricated from pixels — dollar levels only appear when you supply the visible high/low. News, earnings, gaps, liquidity events and information outside the screenshot can invalidate any setup.</div>
+  <div class="footer">BUY / SELL / WAIT is a technical interpretation of the visible chart evidence, not personalized investment advice or a guarantee of future movement. Exact OHLC prices are never fabricated from pixels — dollar levels use imported OHLC or your screenshot price references. News, earnings, gaps, liquidity events and information outside the screenshot can invalidate any setup.</div>
 </div>
 
 <template id="tfTileTemplate">
@@ -129,6 +143,8 @@
   </div>
 </template>
 
+<script src="js/local-data.js"></script>
+<script src="js/offline.js" defer></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
