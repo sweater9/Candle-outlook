@@ -17,6 +17,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Proxy regression tests
+        run: |
+          pip install flask flask-cors requests python-dotenv
+          python -m unittest discover -s server -p 'test_*.py'
+
       - name: Syntax check all JavaScript
         run: |
           for f in js/*.js js/engine/*.js terminal*.js sw.js; do node --check "$f"; done

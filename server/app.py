@@ -25,6 +25,8 @@ try:
 except ImportError:
     pass
 
+from indian_data import IndianClient, IndianError
+
 app = Flask(__name__)
 
 _cors = os.environ.get("CORS_ORIGINS", "*").strip()
@@ -32,6 +34,9 @@ if _cors == "*":
     CORS(app)
 else:
     CORS(app, origins=[o.strip() for o in _cors.split(",") if o.strip()])
+
+INDIANAPI_API_KEY = os.environ.get("INDIANAPI_API_KEY", "").strip()
+indian_client = IndianClient(INDIANAPI_API_KEY)
 
 TWELVEDATA_API_KEY = os.environ.get("TWELVEDATA_API_KEY", "").strip()
 ALPACA_API_KEY = os.environ.get("ALPACA_API_KEY", "").strip()
@@ -414,11 +419,25 @@ def health():
             "service": "candle-outlook-proxy",
             "providers": {
                 "twelvedata": bool(TWELVEDATA_API_KEY),
+                "indianapi": bool(INDIANAPI_API_KEY),
                 "alpaca": bool(ALPACA_API_KEY and ALPACA_API_SECRET),
                 "yfinance": _yf_available(),
             },
         }
     )
+
+
+@app.get("/api/india/stock")
+@rate_limit
+def indian_stock():
+    history = request.args.get("history", "0")
+    if history not in {"0", "1"}:
+        return jsonify({"error": "bad_request", "message": "history must be 0 or 1"}), 400
+    try:
+        result = indian_client.stock(request.args.get("name", ""), request.args.get("exchange", "NSE"), history == "1")
+        return jsonify(result), 200, {"Cache-Control": "no-store"}
+    except IndianError as error:
+        return jsonify({"error": "indian_api_error", "message": str(error)}), error.status
 
 
 @app.get("/api/candles")

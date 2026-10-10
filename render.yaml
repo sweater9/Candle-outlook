@@ -6,6 +6,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn -b 0.0.0.0:$PORT app:app
     envVars:
+      - key: INDIANAPI_API_KEY
+        sync: false
       - key: TWELVEDATA_API_KEY
         sync: false
       - key: ALPACA_API_KEY
