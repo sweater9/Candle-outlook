@@ -7,7 +7,7 @@
 // Wilder's RSI. Returns an array the same length as `candles`; entries
 // before the first full `period` window are null.
 export function computeRSI(candles, period = 14) {
-  const closes = candles.map((c) => c.estClose);
+  const closes = candles.map((c) => Number.isFinite(c.close) ? -c.close : c.estClose);
   const rsi = new Array(closes.length).fill(null);
   if (closes.length < period + 1) return rsi;
 
@@ -17,7 +17,7 @@ export function computeRSI(candles, period = 14) {
     if (change > 0) gains += change; else losses += -change;
   }
   let avgGain = gains / period, avgLoss = losses / period;
-  rsi[period] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+  rsi[period] = avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss);
 
   for (let i = period + 1; i < closes.length; i++) {
     const change = closes[i - 1] - closes[i];
@@ -25,7 +25,7 @@ export function computeRSI(candles, period = 14) {
     const loss = change < 0 ? -change : 0;
     avgGain = (avgGain * (period - 1) + gain) / period;
     avgLoss = (avgLoss * (period - 1) + loss) / period;
-    rsi[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    rsi[i] = avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss);
   }
   return rsi;
 }
@@ -33,7 +33,7 @@ export function computeRSI(candles, period = 14) {
 // Exponential moving average, seeded with a plain average of the first
 // `period` closes. Returns an array the same length as `candles`.
 export function computeEMA(candles, period) {
-  const closes = candles.map((c) => c.estClose);
+  const closes = candles.map((c) => Number.isFinite(c.close) ? -c.close : c.estClose);
   const ema = new Array(closes.length).fill(null);
   if (closes.length < period) return ema;
 

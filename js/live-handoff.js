@@ -29,10 +29,10 @@ export function bootLiveHandoff(deps) {
     const eventRisk = { flagged: $('eventRiskFlag').checked, text: $('eventRiskText').value.trim() };
     const accountSize = parseFloat($('accountSize').value);
     const riskPct = parseFloat($('riskPct').value);
-    const account = (isFinite(accountSize) && isFinite(riskPct) && accountSize > 0 && riskPct > 0) ? { size: accountSize, riskPct } : null;
+    const account = (isFinite(accountSize) && isFinite(riskPct) && accountSize > 0 && riskPct > 0) ? { size: accountSize, riskPct, multiplier:Number($('contractMultiplier').value),quantityStep:Number($('quantityStep').value),tickSize:Number($('tickSize').value),feePerUnit:Number($('feePerUnit').value) } : null;
     const geo = ohlcToGeometry(payload.candles);
     const calibration = (isFinite(geo.highPrice) && isFinite(geo.lowPrice) && geo.highPrice > geo.lowPrice)
-      ? { highPrice: geo.highPrice, lowPrice: geo.lowPrice } : null;
+      ? { highPrice: geo.highPrice, lowPrice: geo.lowPrice, topY:40, bottomY:960 } : null;
     if (calibration) {
       $('chartHigh').value = String(calibration.highPrice);
       $('chartLow').value = String(calibration.lowPrice);
@@ -51,22 +51,24 @@ export function bootLiveHandoff(deps) {
       }
     }
     const focus = runAnalysis({
-      candles: geo.candles, quality: Math.max(geo.quality, 95), ticker, timeframeLabel,
+      candles: geo.candles, quality: geo.quality, ticker, timeframeLabel,
       calibration, volumeContext: volCtx, eventRisk, mtfEntries: [], account,
     });
     $('analyzeBtn').disabled = false;
     renderResult(focus, {
       mtfEntries: [], alignment: null, focusTf: timeframeLabel, otherResults: {},
-      ticker, volumeContext: volCtx, eventRisk, geoH: geo.h,
+      ticker, volumeContext: volCtx, eventRisk, geoH: geo.h, provider:payload.provider,
     });
   }
 
+  let activePayload=null;
   function tryConsumeLiveCandles() {
     const params = new URLSearchParams(location.search);
     const wantLive = params.get('live') === '1' || params.has('live');
     const payload = readLiveCandles();
     if (!payload) return false;
     showLiveBanner(payload);
+    activePayload=payload;
     if (wantLive || !TIMEFRAMES.some((tf) => slots[tf] && slots[tf].img && slots[tf].img.src)) {
       runLiveOhlcAnalysis(payload);
     }
@@ -80,5 +82,5 @@ export function bootLiveHandoff(deps) {
     return true;
   }
 
-  return { tryConsumeLiveCandles, runLiveOhlcAnalysis };
+  return { tryConsumeLiveCandles, runLiveOhlcAnalysis, get payload(){return activePayload} };
 }

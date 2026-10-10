@@ -1,0 +1,47 @@
+name: Local analysis checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Syntax check all JavaScript
+        run: |
+          for f in js/*.js js/engine/*.js terminal*.js sw.js; do node --check "$f"; done
+  browser:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install ${{ matrix.browser }}
+      - name: Browser workflows at desktop and mobile widths
+        env:
+          BROWSERS: ${{ matrix.browser }}
+        run: npm run test:browser
+      - name: Browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-${{ matrix.browser }}
+          path: test-results/
+          if-no-files-found: ignore

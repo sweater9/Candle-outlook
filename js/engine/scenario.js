@@ -20,9 +20,13 @@ export function buildLevels(candles, structure, calibration) {
 
   if (calibration && isFinite(calibration.highPrice) && isFinite(calibration.lowPrice) && calibration.highPrice > calibration.lowPrice) {
     const { highPrice, lowPrice } = calibration;
-    const { topY, bottomY } = bounds;
-    const span = Math.max(1, bottomY - topY);
-    const priceAt = (y) => highPrice - ((y - topY) / span) * (highPrice - lowPrice);
+    const topY = calibration.topY ?? bounds.topY;
+    const bottomY = calibration.bottomY ?? bounds.bottomY;
+    const span = bottomY - topY;
+    if (!Number.isFinite(span) || span <= 0 || (calibration.scale === 'log' && lowPrice <= 0)) return levels;
+    const priceAt = calibration.scale === 'log'
+      ? y => Math.exp(Math.log(highPrice) - ((y-topY)/span)*(Math.log(highPrice)-Math.log(lowPrice)))
+      : y => highPrice - ((y-topY)/span)*(highPrice-lowPrice);
     levels.priceAt = priceAt;
     levels.resistancePrice = priceAt(resistanceY);
     levels.supportPrice = priceAt(supportY);
@@ -46,7 +50,7 @@ export function buildTradePlan(candles, levels, sign) {
   // from here down to the stop, reward from here up to the target, so a
   // setup already extended toward its confirmation level correctly scores
   // a worse R:R than one still sitting back near support/resistance.
-  const entryY = candles.at(-1).mid;
+  const entryY = candles.at(-1).estClose ?? candles.at(-1).mid;
 
   let confirmationY, invalidationY, stopY, t1Y, t2Y;
   if (sign > 0) {
@@ -65,7 +69,9 @@ export function buildTradePlan(candles, levels, sign) {
 
   const riskY = Math.abs(stopY - entryY);
   const rewardY = Math.abs(t1Y - entryY);
-  const rr = riskY > 0 ? rewardY / riskY : null;
+  const risk = levels.calibrated ? Math.abs(levels.priceAt(stopY)-levels.priceAt(entryY)) : riskY;
+  const reward = levels.calibrated ? Math.abs(levels.priceAt(t1Y)-levels.priceAt(entryY)) : rewardY;
+  const rr = risk > 0 ? reward / risk : null;
 
   return { confirmationY, invalidationY, entryY, stopY, t1Y, t2Y, rr, rangeY, riskY, rewardY };
 }
@@ -73,21 +79,23 @@ export function buildTradePlan(candles, levels, sign) {
 // Position-size helper: given account size and max risk (% or $), and a
 // calibrated per-share/contract risk distance, returns a share count.
 // Never fabricates a size when price isn't calibrated — returns null.
-export function positionSize({ accountSize, riskPct, levels, plan }) {
-  if (!levels.calibrated || !accountSize || !riskPct) return null;
+export function positionSize({ accountSize, riskPct, levels, plan, multiplier = 1, quantityStep = 1, feePerUnit = 0, tickSize = 0 }) {
+  if (!levels.calibrated || ![accountSize,riskPct,multiplier,quantityStep].every(v=>Number.isFinite(v)&&v>0) || riskPct>100 || !Number.isFinite(feePerUnit) || feePerUnit<0 || !Number.isFinite(tickSize) || tickSize<0) return null;
   const riskDollars = accountSize * (riskPct / 100);
   const entryPrice = levels.priceAt(plan.entryY);
-  const stopPrice = levels.priceAt(plan.stopY);
-  const perShareRisk = Math.abs(entryPrice - stopPrice);
+  const rawStop = levels.priceAt(plan.stopY);
+  const stopPrice = tickSize > 0 ? (rawStop < entryPrice ? Math.floor(rawStop/tickSize) : Math.ceil(rawStop/tickSize))*tickSize : rawStop;
+  const perShareRisk = Math.abs(entryPrice - stopPrice)*multiplier + feePerUnit;
   if (perShareRisk <= 0) return null;
-  const shares = Math.floor(riskDollars / perShareRisk);
-  return { riskDollars, entryPrice, stopPrice, perShareRisk, shares };
+  const shares = Number((Math.floor(riskDollars / perShareRisk / quantityStep) * quantityStep).toPrecision(12));
+  return { riskDollars, entryPrice, stopPrice, perShareRisk, shares, multiplier, quantityStep, feePerUnit };
 }
 
 // "Sometimes WAIT is the most informative output." Hard no-trade gates —
 // any one of these overrides an otherwise-directional read.
-export function evaluateNoTrade({ quality, candleCount, rr, structure, levels, lastCandle, mtfEntries, sign }) {
+export function evaluateNoTrade({ quality, candleCount, rr, structure, levels, lastCandle, mtfEntries, sign, plan }) {
   const reasons = [];
+  if (plan && ((sign > 0 && !(plan.stopY > plan.entryY && plan.t1Y < plan.entryY)) || (sign < 0 && !(plan.stopY < plan.entryY && plan.t1Y > plan.entryY)))) reasons.push('Stop and target are not on the correct sides of entry.');
   if (quality < 48) reasons.push('Image-read quality is too low to trust the candle geometry.');
   if (candleCount < 7) reasons.push('Too few candles are visible to establish reliable structure.');
   if (rr != null && rr < 1.3) reasons.push(`Risk:reward is weak (about 1:${rr.toFixed(1)}) — below the 1:1.3 this engine requires before favoring a trade.`);
