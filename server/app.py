@@ -167,11 +167,17 @@ def fetch_twelvedata(symbol: str, interval_key: str, limit: int) -> dict:
         "order": "ASC",
         "timezone": "UTC",
     }
-    r = requests.get(url, params=params, timeout=25)
-    data = r.json() if r.content else {}
+    try:
+        r = requests.get(url, params=params, timeout=25)
+        data = r.json() if r.content else {}
+    except (requests.RequestException, ValueError):
+        # requests exceptions can include the full URL with the API key.
+        raise RuntimeError("Twelve Data request failed; check the proxy connection.") from None
+    if not isinstance(data, dict):
+        raise RuntimeError("Twelve Data returned an invalid response")
     if r.status_code != 200 or data.get("status") == "error":
         msg = data.get("message") or data.get("status") or f"HTTP {r.status_code}"
-        raise RuntimeError(f"Twelve Data: {msg}")
+        raise RuntimeError(f"Twelve Data: {str(msg).replace(TWELVEDATA_API_KEY, '[redacted]')}")
     values = data.get("values") or []
     candles = []
     for row in values:
