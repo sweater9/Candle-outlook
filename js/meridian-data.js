@@ -24,3 +24,21 @@ export function validateResponse(payload) {
   if(rows.length<30)throw Error('At least 30 daily candles are needed for analysis.');
   return rows;
 }
+
+export function parseIndianQueries(raw) {
+  const queries=[...new Set(raw.split(',').map(s=>s.trim()).filter(Boolean))];
+  if(!queries.length||queries.length>8||queries.some(s=>! /^[A-Za-z0-9][A-Za-z0-9 .&()'-]{0,79}$/.test(s)))throw Error('Enter 1–8 Indian stock symbols or company names separated by commas.');
+  return queries;
+}
+export function validateIndian(payload,exchange) {
+  const q=payload.quote;
+  if(payload.provider!=='indianapi'||!q||q.exchange!==exchange||q.currency!=='INR'||!Number.isFinite(q.price)||q.price<=0||!q.company||!q.symbol||!Number.isFinite(Date.parse(payload.fetched_at)))throw Error('Invalid Indian API quote or exchange mismatch.');
+  if(q.change!=null&&!Number.isFinite(q.change))throw Error('Invalid quote change.');
+  const history=payload.history;
+  if(history){
+    if(history.kind!=='price-series'||!history.label.toUpperCase().includes(exchange)||!Array.isArray(history.points)||history.points.length<2)throw Error('Invalid price history or exchange mismatch.');
+    const seen=new Set();for(const p of history.points){if(!/^\d{4}-\d{2}-\d{2}$/.test(p.date)||new Date(p.date).toISOString().slice(0,10)!==p.date||!Number.isFinite(p.price)||p.price<=0||seen.has(p.date))throw Error('Invalid price history.');seen.add(p.date);}
+    if(history.points.some((p,i)=>i&&p.date<=history.points[i-1].date))throw Error('Price history must be ordered.');
+  }
+  return payload;
+}
