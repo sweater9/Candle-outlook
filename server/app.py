@@ -411,12 +411,26 @@ def index():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+def indian_key_status(environ):
+    expected = "INDIANAPI_API_KEY"
+    value = environ.get(expected)
+    status = "absent" if value is None else "configured" if value.strip() else "empty"
+    # Report only a boolean, never variable names or credential values.
+    similar = any(k != expected and "INDIAN" in k.upper() for k in environ)
+    return {"variable": expected, "status": status, "similar_name_present": similar}
+
+
 @app.get("/api/health")
 def health():
     return jsonify(
         {
             "ok": True,
             "service": "candle-outlook-proxy",
+            "configuration": {"indianapi": indian_key_status(os.environ)},
+            "deployment": {
+                "commit": os.environ.get("RENDER_GIT_COMMIT", "unknown"),
+                "service_name": os.environ.get("RENDER_SERVICE_NAME", "unknown"),
+            },
             "providers": {
                 "twelvedata": bool(TWELVEDATA_API_KEY),
                 "indianapi": bool(INDIANAPI_API_KEY),
@@ -424,7 +438,7 @@ def health():
                 "yfinance": _yf_available(),
             },
         }
-    )
+    ), 200, {"Cache-Control": "no-store"}
 
 
 @app.get("/api/india/stock")

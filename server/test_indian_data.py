@@ -88,6 +88,17 @@ class IndianTests(unittest.TestCase):
                 IndianClient('private-test-key', transport).stock('Reliance')
             self.assertNotIn('private-test-key', str(error.exception))
 
+    def test_health_diagnostic_does_not_expose_names_or_keys(self):
+        import app
+        for environment, status in [({}, 'absent'), ({'INDIANAPI_API_KEY': ''}, 'empty'), ({'INDIANAPI_API_KEY': 'private-test-key'}, 'configured')]:
+            result = app.indian_key_status(environment)
+            self.assertEqual(result['status'], status)
+            self.assertNotIn('private-test-key', str(result))
+        result = app.indian_key_status({'INDIANAPI_API_KEY ': 'private-test-key'})
+        self.assertEqual(result['status'], 'absent')
+        self.assertTrue(result['similar_name_present'])
+        self.assertNotIn('private-test-key', str(result))
+
     def test_flask_route_health_and_history_flag(self):
         import app
         with patch.object(app.indian_client, 'stock', return_value={'provider': 'indianapi'}) as stock:
