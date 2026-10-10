@@ -45,3 +45,21 @@ Open `terminal.html`. Proxy base defaults to `http://localhost:5055`.
 ## Render
 
 See `render.yaml`. Set the three API env vars in the Render dashboard.
+
+## Meridian (Twelve Data only)
+
+Open `meridian.html?api=https://your-proxy.example` or enter the proxy origin in
+**Twelve Data connection**. The server needs only `TWELVEDATA_API_KEY` for Meridian;
+Alpaca credentials are optional. Check connection, then scan up to eight symbols
+or analyze one symbol. The frontend requests `provider=twelvedata` explicitly and
+rejects other providers. Scans stop on the first error and retain successful rows.
+Requests are paced nine seconds apart and successful responses are cached in the
+current tab for five minutes. These limits do not replace your account's daily
+credit limits. No API key is accepted or stored by the frontend.
+
+GitHub Pages serves only the UI; it cannot run the Python proxy. Deploy the
+`render.yaml` service separately and set `TWELVEDATA_API_KEY` as a secret in the
+hosting dashboard. Set `CORS_ORIGINS=https://sweater9.github.io` for this frontend.
+The proxy is public; use host-level access/rate controls appropriate to your quota.
+Live account authentication and market entitlement must be checked with your key.
+Daily dates represent exchange trading dates; intraday requests use UTC.

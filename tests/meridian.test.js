@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {proxyOrigin,parseSymbols,validateResponse} from '../js/meridian-data.js';
+const payload=()=>({provider:'twelvedata',candles:Array.from({length:30},(_,i)=>({time:new Date(Date.UTC(2026,0,i+1)).toISOString().slice(0,10),open:'10',high:'12',low:'9',close:'11',volume:'5'}))});
+test('Meridian accepts secure origins, bounded symbols and valid Twelve Data rows',()=>{assert.equal(proxyOrigin('https://example.com/'),'https://example.com');assert.deepEqual(parseSymbols('aapl, AAPL, BTC/USD'),['AAPL','BTC/USD']);const rows=validateResponse(payload());assert.equal(rows.length,30);assert.equal(rows[0].close,11);assert.equal(rows[0].time.toISOString(),'2026-01-01T00:00:00.000Z');});
+test('Meridian rejects keys in URLs, insecure hosts, large scans, fallback providers and corrupt candles',()=>{for(const url of ['https://x.test?apikey=secret','https://user:secret@x.test','http://x.test','https://x.test/api'])assert.throws(()=>proxyOrigin(url));assert.throws(()=>parseSymbols('A,B,C,D,E,F,G,H,I'));assert.throws(()=>validateResponse({...payload(),provider:'yfinance'}));const duplicate=payload();duplicate.candles[1].time=duplicate.candles[0].time;assert.throws(()=>validateResponse(duplicate));const invalid=payload();invalid.candles[0].high=5;assert.throws(()=>validateResponse(invalid));});
