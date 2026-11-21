@@ -6,14 +6,77 @@ import math
 import re
 import time
 import threading
-from datetime import datetime, timezone
-import requests
+from datetime import date, datetime, time as clock_time, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+try:
+    import requests
+except ImportError:  # Keep pure normalization/session analysis usable without proxy dependencies.
+    requests = None
 
 
 class IndianError(Exception):
     def __init__(self, message, status=502):
         super().__init__(message)
         self.status = status
+
+
+INDIA_TZ = ZoneInfo("Asia/Kolkata")
+NSE_SESSION_OPEN = clock_time(9, 15)
+NSE_SESSION_CLOSE = clock_time(15, 30)
+
+
+def exchange_session(day):
+    """Return the regular NSE/BSE cash session in IST; holidays are intentionally not inferred."""
+    if isinstance(day, str):
+        try:
+            day = date.fromisoformat(day)
+        except ValueError:
+            raise IndianError("Session date must use YYYY-MM-DD.", 400) from None
+    if not isinstance(day, date) or isinstance(day, datetime):
+        raise IndianError("Session date must use YYYY-MM-DD.", 400)
+    if day.weekday() >= 5:
+        return None
+    return {
+        "timezone": "Asia/Kolkata",
+        "open": datetime.combine(day, NSE_SESSION_OPEN, INDIA_TZ).isoformat(),
+        "close": datetime.combine(day, NSE_SESSION_CLOSE, INDIA_TZ).isoformat(),
+        "holiday_calendar_applied": False,
+    }
+
+
+def analyze_price_series(points):
+    """Describe sampled closes for research; never emits a directional trade instruction."""
+    if not isinstance(points, list) or len(points) < 2:
+        raise IndianError("At least two price samples are required for analysis.", 400)
+    prices = []
+    previous_date = ""
+    for point in points:
+        if not isinstance(point, dict):
+            raise IndianError("Invalid price sample.", 400)
+        day, price = point.get("date"), number(point.get("price"))
+        try:
+            valid_day = date.fromisoformat(str(day))
+        except ValueError:
+            raise IndianError("Invalid price sample date.", 400) from None
+        if valid_day.isoformat() != day or day <= previous_date or price is None or price <= 0:
+            raise IndianError("Price samples must have ascending dates and positive prices.", 400)
+        previous_date = day
+        prices.append(price)
+    first, last = prices[0], prices[-1]
+    change_pct = (last / first - 1) * 100
+    returns = [(b / a - 1) * 100 for a, b in zip(prices, prices[1:])]
+    mean = sum(returns) / len(returns)
+    volatility = (sum((r - mean) ** 2 for r in returns) / len(returns)) ** 0.5
+    return {
+        "kind": "price-series-research",
+        "sample_count": len(prices),
+        "period_start": points[0]["date"],
+        "period_end": points[-1]["date"],
+        "sample_change_pct": round(change_pct, 4),
+        "sample_return_volatility_pct": round(volatility, 4),
+        "interpretation": "Descriptive sampled-price statistics only; no OHLC, forecast, trade signal, stop, or target.",
+    }
 
 
 def number(value):
@@ -75,14 +138,16 @@ def normalize_history(data, exchange):
     points.sort(key=lambda p: p["date"])
     if len(points) < 2:
         raise IndianError("Insufficient valid price history. Quotes remain available.")
-    return {"points": points[-500:], "is_weekly": bool((price.get("meta") or {}).get("is_weekly")),
-            "label": str(price.get("label", "Price")), "kind": "price-series"}
+    points = points[-500:]
+    return {"points": points, "is_weekly": bool((price.get("meta") or {}).get("is_weekly")),
+            "label": str(price.get("label", "Price")), "kind": "price-series",
+            "exchange": exchange, "analysis": analyze_price_series(points)}
 
 
 class IndianClient:
-    def __init__(self, key, transport=requests.get):
+    def __init__(self, key, transport=None):
         self.key = key
-        self.transport = transport
+        self.transport = transport or (requests.get if requests else None)
         self.cache = {}
         self.lock = threading.RLock()
         self.last_request = 0
@@ -104,6 +169,8 @@ class IndianClient:
     def _request(self, path, params, ttl):
         if not self.key:
             raise IndianError("INDIANAPI_API_KEY is not configured on the proxy.", 503)
+        if self.transport is None:
+            raise IndianError("Indian API proxy dependencies are not installed.", 503)
         key = (path, tuple(sorted(params.items())))
         with self.lock:
             cached = self.cache.get(key)
@@ -122,7 +189,7 @@ class IndianClient:
                 response = self.transport("https://stock.indianapi.in" + path, params=params,
                                           headers={"X-API-Key": self.key, "Accept": "application/json"}, timeout=25)
                 data = response.json()
-            except (requests.RequestException, ValueError):
+            except (OSError, ValueError):
                 raise IndianError("Indian API connection failed. Try again later.") from None
             if response.status_code in {401, 403}:
                 raise IndianError("Indian API rejected access. Check the Render key and your plan's endpoint access.", 502)
