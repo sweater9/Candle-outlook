@@ -83,11 +83,16 @@ credentials are sent upstream in `X-API-Key` and never returned to the frontend.
   Do not multiply workers/instances if relying on these conservative limits.
 - History is a dated **price series**, not OHLC. Meridian shows a price line and
   price-sample RSI/EMAs. No candle patterns, ATR, conviction score, stop/target plan,
-  or OHLC handoff is produced from Indian API price history.
+  or OHLC handoff is produced from Indian API price history. The proxy also returns
+  bounded descriptive sample statistics (period change and sample-return volatility);
+  these are research context only and do not create a forecast, trade signal, stop, or target.
 - The exchange must match the historical dataset label; NSE history is never
   silently shown for a BSE quote. Quotes remain usable when history access fails.
 - Provider delay is unverified. Retrieval time is shown in Asia/Kolkata separately
   from the source timestamp; it must not be interpreted as the last trade time.
+- NSE/BSE regular cash-market session metadata uses Asia/Kolkata, 09:15–15:30 on
+  weekdays. The helper deliberately does not apply exchange holidays or special sessions;
+  it must not be used as a market-open guarantee or as an order-timing control.
 
 The configured production proxy is `https://candle-outlook-proxy.onrender.com`.
 GitHub Pages is the static frontend; Render deploys the Python backend separately.

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
-import requests
-from indian_data import IndianClient, IndianError, normalize_quote, normalize_history
+from indian_data import (IndianClient, IndianError, analyze_price_series, exchange_session,
+                         normalize_quote, normalize_history)
 
 QUOTE = {"tickerId": "RELIANCE", "companyName": "Reliance Industries", "currentPrice": {"NSE": "1,500", "BSE": 1501}, "percentChange": 1.2}
 HISTORY = {"datasets": [{"metric": "Price", "label": "Price on NSE", "values": [["2026-10-08", "1495"], ["2026-10-09", "1500"]], "meta": {"is_weekly": False}}]}
@@ -27,8 +27,35 @@ class IndianTests(unittest.TestCase):
         h = normalize_history(HISTORY, "NSE")
         self.assertEqual(h["points"][-1], {"date": "2026-10-09", "price": 1500})
         self.assertNotIn("open", h["points"][0])
+        self.assertEqual(h["exchange"], "NSE")
+        self.assertEqual(h["analysis"]["kind"], "price-series-research")
+        self.assertNotIn("signal", h["analysis"])
         with self.assertRaises(IndianError):
             normalize_history(HISTORY, "BSE")
+
+    def test_indian_cash_session_is_timezone_aware_and_weekends_are_closed(self):
+        session = exchange_session("2026-11-23")
+        self.assertEqual(session["timezone"], "Asia/Kolkata")
+        self.assertEqual(session["open"], "2026-11-23T09:15:00+05:30")
+        self.assertEqual(session["close"], "2026-11-23T15:30:00+05:30")
+        self.assertFalse(session["holiday_calendar_applied"])
+        self.assertIsNone(exchange_session("2026-11-22"))
+        with self.assertRaises(IndianError):
+            exchange_session("not-a-date")
+
+    def test_price_series_analysis_is_descriptive_and_validates_order(self):
+        result = analyze_price_series([
+            {"date": "2026-10-08", "price": 100},
+            {"date": "2026-10-09", "price": 110},
+            {"date": "2026-10-12", "price": 105},
+        ])
+        self.assertEqual(result["sample_count"], 3)
+        self.assertEqual(result["sample_change_pct"], 5.0)
+        self.assertNotIn("decision", result)
+        self.assertNotIn("stop", result)
+        with self.assertRaises(IndianError):
+            analyze_price_series([{"date": "2026-10-09", "price": 100},
+                                  {"date": "2026-10-08", "price": 101}])
 
     @patch('indian_data.time.sleep')
     def test_auth_header_quote_cache_shared_between_exchanges_and_history_cache(self, sleep):
@@ -51,9 +78,11 @@ class IndianTests(unittest.TestCase):
 
     @patch('indian_data.time.sleep')
     def test_no_secret_leak_and_history_failure_preserves_quote(self, sleep):
+        class ConnectionError(OSError):
+            pass
         def transport(url, **kwargs):
             if url.endswith('historical_data'):
-                raise requests.ConnectionError('private-test-key upstream failure')
+                raise ConnectionError('private-test-key upstream failure')
             return Response(QUOTE)
         result = IndianClient('private-test-key', transport).stock('Reliance', history=True)
         self.assertEqual(result['quote']['price'], 1500)
