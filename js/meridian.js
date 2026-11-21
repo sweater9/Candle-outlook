@@ -1,7 +1,7 @@
 import {analyzeRows} from './backtest.js';
 import {computeEMA,computeRSI} from './engine/indicators.js';
 import {proxyOrigin,parseSymbols,validateResponse,parseIndianQueries,validateIndian} from './meridian-data.js';
-const $=s=>document.querySelector(s),cache=new Map();let results=[],selected=null,busy=false,lastRequest=0;
+const $=s=>document.querySelector(s),cache=new Map();let results=[],selected=null,indiaResearch=null,busy=false,lastRequest=0;
 const text=(s,v)=>$(s).textContent=v;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Number.isFinite(n)?n.toFixed(2):'—';
@@ -29,11 +29,20 @@ async function loadData(symbol,history=false){
 function table(){
   if(!india())results.sort((a,b)=>b.result.conviction-a.result.conviction);
   text('#scanned',results.length);text('#qualified',india()?results.length:results.filter(x=>x.result.decision!=='WAIT').length);text('#topScore',!india()&&results.length?results[0].result.conviction:'—');$('#empty').hidden=!!results.length;
+  if($('#indiaDashboard')){$('#indiaDashboard').hidden=!india();text('#indiaQuoteCount',india()?results.length:0);const changes=results.filter(x=>india()&&Number.isFinite(x.change)),up=changes.filter(x=>x.change>0).length,down=changes.filter(x=>x.change<0).length;text('#indiaBreadth',changes.length?`${up} / ${down}`:'—');text('#indiaBreadthNote',changes.length?'Provider change where supplied':'Exchange-scoped change not supplied');text('#indiaExchangeLabel',`${market()} · INR snapshot research`);}
   const headings=india()?['Company','Quote (₹)','Exchange','Source time','Retrieved (IST)']:['Symbol','Close','Change','Decision','Conviction','Bar date'];
   $('#setups').innerHTML='<thead><tr>'+headings.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+results.map((x,i)=>india()?`<tr><td><button class="sym" data-row="${i}">${esc(x.payload.quote.company)}</button></td><td>₹${fmt(x.price)}</td><td>${x.market}</td><td>${esc(x.payload.quote.source_time||'Not supplied')}</td><td>${esc(ist(x.payload.fetched_at))}</td></tr>`:`<tr><td><button class="sym" data-symbol="${esc(x.symbol)}" data-row="${i}">${esc(x.symbol)}</button></td><td>${fmt(x.price)}</td><td>${fmt(x.change)}%</td><td>${esc(x.result.decision)}</td><td>${x.result.conviction}/100</td><td>${x.rows.at(-1).time.toISOString().slice(0,10)}</td></tr>`).join('')+'</tbody>';
 }
 function ist(date){return new Date(date).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'medium',timeStyle:'short'});}
 function indicatorRows(rows){$('#ind').innerHTML=rows.map(([k,v])=>`<div class="kv"><span>${esc(k)}</span><span>${fmt(v)}</span></div>`).join('');}
+function updateIndiaResearch(item){
+  if(!item||item.market==='US'||!item.payload.history){text('#indiaPeriodChange','—');text('#indiaPeriodLabel','Load a stock analysis');text('#indiaVolatility','—');$('#indiaChart').innerHTML='<div class="india-chart-empty">Choose a scan result and load analysis to view its historical price series.</div>';return;}
+  const h=item.payload.history,points=h.points,prices=points.map(p=>p.price),first=prices[0],last=prices.at(-1),change=(last/first-1)*100,returns=prices.slice(1).map((p,i)=>(p/prices[i]-1)*100),mean=returns.reduce((a,b)=>a+b,0)/returns.length,vol=Math.sqrt(returns.reduce((a,b)=>a+(b-mean)**2,0)/returns.length);
+  const summary=h.analysis&&Number.isFinite(h.analysis.sample_change_pct)&&Number.isFinite(h.analysis.sample_return_volatility_pct)?h.analysis:{sample_change_pct:change,sample_return_volatility_pct:vol};
+  text('#indiaPeriodChange',`${summary.sample_change_pct>=0?'+':''}${fmt(summary.sample_change_pct)}%`);text('#indiaPeriodLabel',`${points.length} samples · ${points[0].date} to ${points.at(-1).date}`);text('#indiaVolatility',`${fmt(summary.sample_return_volatility_pct)}%`);
+  const shown=points.slice(-120),lo=Math.min(...shown.map(p=>p.price)),hi=Math.max(...shown.map(p=>p.price)),spread=hi-lo||1,coords=shown.map((p,i)=>`${12+i*696/Math.max(1,shown.length-1)},${154-(p.price-lo)/spread*132}`).join(' ');
+  $('#indiaChart').innerHTML=`<svg viewBox="0 0 720 180" role="img" aria-label="${esc(item.market)} historical sampled-price line from ${esc(shown[0].date)} to ${esc(shown.at(-1).date)}"><line x1="12" x2="708" y1="22" y2="22" stroke="#e2e8f0"/><line x1="12" x2="708" y1="88" y2="88" stroke="#e2e8f0"/><line x1="12" x2="708" y1="154" y2="154" stroke="#e2e8f0"/><polyline fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${coords}"/><text x="12" y="174" fill="#64748b" font-size="10">${esc(shown[0].date)}</text><text x="708" y="174" text-anchor="end" fill="#64748b" font-size="10">${esc(shown.at(-1).date)}</text></svg>`;
+}
 function detail(item){
   selected=item;show('analyze');$('#analysis').hidden=false;$('#symbol').value=item.query;
   text('#name',item.symbol);text('#price',(item.market==='US'?'':'₹')+fmt(item.price));text('#change',item.market==='US'?fmt(item.change)+'%':item.payload.quote.company);
@@ -49,7 +58,7 @@ function detail(item){
   $('#chart').innerHTML=rows.map((c,i)=>{const x=10+(i+.5)*740/rows.length,color=c.close>=c.open?'#059669':'#e11d48';return `<line x1="${x}" x2="${x}" y1="${y(c.high)}" y2="${y(c.low)}" stroke="${color}"/><rect x="${x-3}" width="6" y="${Math.min(y(c.open),y(c.close))}" height="${Math.max(1,Math.abs(y(c.open)-y(c.close)))}" fill="${color}"/>`;}).join('');
 }
 function detailIndia(item){
-  const p=item.payload,h=p.history;$('#chart').setAttribute('aria-label',`${item.market} historical price line chart`);
+  const p=item.payload,h=p.history;indiaResearch=item;updateIndiaResearch(item);$('#chart').setAttribute('aria-label',`${item.market} historical price line chart`);
   text('#analysisNote','Indian API supplies price history rather than full OHLC. RSI and EMAs use historical price samples only. Candle patterns, ATR, trade plans and conviction scores require full OHLC and are unavailable here.');
   text('#asOf',`Indian API · ${item.market} · source time: ${p.quote.source_time||'not supplied'} · snapshot retrieved ${ist(p.fetched_at)} IST${p.cached?' (server cache)':''}. Delay unverified; retrieval time is not trade time.${h?` History ends ${h.points.at(-1).date}; ${h.is_weekly?'weekly':'provider price'} samples.`:''}`);
   if(!h){$('#chart').innerHTML='<text x="30" y="140" fill="#64748b">Price history unavailable; quote loaded.</text>';indicatorRows([]);text('#thesis',p.history_error||'Load analysis to request historical prices.');text('#analysisStatus','Loaded Indian API quote. '+(p.history_error||''));return;}
@@ -67,7 +76,7 @@ $('#run').onclick=async()=>{if(busy)return;let symbols;try{base();symbols=querie
 $('#load').onclick=()=>analyze($('#symbol').value);
 $('#handoff').onclick=()=>{if(!selected||selected.market!=='US')return;try{sessionStorage.setItem('co-live-candles',JSON.stringify({symbol:selected.symbol,interval:'1D',provider:'Twelve Data',candles:selected.rows}));location.href='index.html';}catch{text('#analysisStatus','Unable to save the analysis handoff in this browser.');}};
 $('#market').onchange=()=>{
-  results=[];selected=null;$('#analysis').hidden=true;$('#symbols').value=india()?'RELIANCE, TCS, INFY':'AAPL, MSFT, NVDA';$('#symbol').value=india()?'RELIANCE':'AAPL';
+  results=[];selected=null;indiaResearch=null;updateIndiaResearch(null);$('#analysis').hidden=true;$('#symbols').value=india()?'RELIANCE, TCS, INFY':'AAPL, MSFT, NVDA';$('#symbol').value=india()?'RELIANCE':'AAPL';
   text('#providerLabel',provider());text('#providerNote',india()?'Quote snapshots & price history':'Daily candles');text('#qualifiedLabel',india()?'Quotes loaded':'Directional Setups');text('#qualifiedNote',india()?'Selected exchange':'BUY or SELL engine decision');text('#scoreLabel',india()?'OHLC scoring':'Top Conviction');text('#scoreNote',india()?'Requires full candles':'Technical engine · /100');text('#symbolsLabel',india()?'Company names or symbols (up to 8)':'Symbols (up to 8)');text('#symbolLabel',india()?'Company name or symbol':'Symbol');
   text('#marketNote',india()?`India · ${market()} · ₹ INR. Look up provider-supported stocks by company name or symbol. Delay unverified; not a tick stream.`:'US: daily OHLC analysis.');
   text('#scanNote',india()?'Free plan: 500 requests/month. Each uncached scan stock costs 1 request; analysis adds 1 history request. Server caches quotes for 1 hour and history for 24 hours, and allows at most 12 upstream requests/day per running process. No background refresh.':'One request per US symbol, paced 9 seconds apart. Results use a 5-minute local cache.');
